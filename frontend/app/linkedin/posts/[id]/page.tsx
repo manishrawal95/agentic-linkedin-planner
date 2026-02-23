@@ -54,6 +54,7 @@ interface Post {
   topic_tags: string;
   created_at: string;
   updated_at: string;
+  classification?: string | null;
 }
 
 interface MetricSnapshot {
@@ -93,17 +94,27 @@ interface Learning {
 
 /* ── Constants ────────────────────────────────────────────────── */
 
-const SNAPSHOT_LABELS: Record<string, string> = {
-  "12h": "12 hours",
-  "24h": "24 hours",
-  "48h": "48 hours",
-  "1w": "1 week",
-  later: "1 week+",
-};
+function formatElapsed(snapshotAt: string, postedAt: string | null): string | null {
+  if (!postedAt) return null;
+  // Treat both timestamps as UTC — append "Z" only if no timezone info present
+  const toUTC = (s: string) => /[Zz]|[+-]\d{2}:\d{2}$/.test(s) ? new Date(s) : new Date(s + "Z");
+  const ms = toUTC(snapshotAt).getTime() - toUTC(postedAt).getTime();
+  if (ms < 0) return null;
+  const totalMins = Math.floor(ms / 60000);
+  const days = Math.floor(totalMins / 1440);
+  const hours = Math.floor((totalMins % 1440) / 60);
+  const mins = totalMins % 60;
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  return `${mins}m`;
+}
 
 const TYPE_COLORS: Record<string, string> = {
   text: "bg-gray-100 text-gray-600",
   carousel: "bg-orange-100 text-orange-700",
+  "personal image": "bg-emerald-100 text-emerald-700",
+  "Social Proof Image": "bg-teal-100 text-teal-700",
+  image: "bg-emerald-100 text-emerald-700",
   poll: "bg-cyan-100 text-cyan-700",
   video: "bg-red-100 text-red-700",
   article: "bg-blue-100 text-blue-700",
@@ -129,6 +140,7 @@ export default function PostDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [showMetricsForm, setShowMetricsForm] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeResult, setAnalyzeResult] = useState<{ classification: string; learnings_extracted: number } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const fetchPost = useCallback(async () => {
@@ -177,28 +189,29 @@ export default function PostDetailPage() {
     postId: number,
     data: Record<string, number>
   ) => {
-    await fetch(`/api/linkedin/posts/${postId}/metrics`, {
+    const res = await fetch(`/api/linkedin/posts/${postId}/metrics`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+    if (!res.ok) return; // keep form open on error
     setShowMetricsForm(false);
     fetchPost();
   };
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
+    setAnalyzeResult(null);
     try {
       const res = await fetch(`/api/linkedin/analyze/${id}`, {
         method: "POST",
       });
       const data = await res.json();
-      alert(
-        `Analysis complete!\nClassification: ${data.classification}\nLearnings extracted: ${data.learnings_extracted}`
-      );
+      setAnalyzeResult({ classification: data.classification, learnings_extracted: data.learnings_extracted });
       fetchLearnings();
+      fetchPost();
     } catch {
-      alert("Analysis failed. Make sure the post has metrics.");
+      setAnalyzeResult(null);
     } finally {
       setAnalyzing(false);
     }
@@ -228,12 +241,11 @@ export default function PostDetailPage() {
   const chartData = [...metrics]
     .reverse()
     .map((m) => ({
-      date: m.snapshot_type
-        ? SNAPSHOT_LABELS[m.snapshot_type] || m.snapshot_type
-        : new Date(m.snapshot_at).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          }),
+      date: formatElapsed(m.snapshot_at, post?.posted_at ?? null) ??
+        new Date(m.snapshot_at + "Z").toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        }),
       engagement: +(m.engagement_score * 100).toFixed(2),
       impressions: m.impressions,
     }));
@@ -324,6 +336,22 @@ export default function PostDetailPage() {
             {post.cta_type !== "none" && (
               <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-amber-100 text-amber-700">
                 CTA: {post.cta_type}
+              </span>
+            )}
+
+            {post.classification === "hit" && (
+              <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-green-100 text-green-700">
+                🔥 Hit
+              </span>
+            )}
+            {post.classification === "average" && (
+              <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-amber-100 text-amber-700">
+                Avg
+              </span>
+            )}
+            {post.classification === "miss" && (
+              <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-red-100 text-red-700">
+                Miss
               </span>
             )}
 
@@ -443,6 +471,26 @@ export default function PostDetailPage() {
           {copied ? "Copied!" : "Copy Content"}
         </button>
       </div>
+
+      {/* ── Analyze Result Card ───────────────────────────────── */}
+      {analyzeResult && (
+        <div className={`rounded-xl border p-4 flex items-center gap-3 ${
+          analyzeResult.classification === "hit"
+            ? "bg-green-50 border-green-200 text-green-800"
+            : analyzeResult.classification === "miss"
+            ? "bg-red-50 border-red-200 text-red-800"
+            : "bg-amber-50 border-amber-200 text-amber-800"
+        }`}>
+          <span className="text-lg">
+            {analyzeResult.classification === "hit" ? "🔥" : analyzeResult.classification === "miss" ? "❌" : "📊"}
+          </span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold capitalize">{analyzeResult.classification}</p>
+            <p className="text-xs opacity-80">{analyzeResult.learnings_extracted} learnings extracted</p>
+          </div>
+          <button onClick={() => setAnalyzeResult(null)} className="text-xs opacity-60 hover:opacity-100">✕</button>
+        </div>
+      )}
 
       {/* ── Inline Metrics Form ───────────────────────────────── */}
       {showMetricsForm && (
@@ -608,17 +656,16 @@ export default function PostDetailPage() {
                       className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
                     >
                       <td className="py-2.5 px-2">
-                        {m.snapshot_type ? (
+                        {formatElapsed(m.snapshot_at, post.posted_at) ? (
                           <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600">
-                            {SNAPSHOT_LABELS[m.snapshot_type] ||
-                              m.snapshot_type}
+                            {formatElapsed(m.snapshot_at, post.posted_at)}
                           </span>
                         ) : (
                           <span className="text-xs text-gray-400">--</span>
                         )}
                       </td>
                       <td className="py-2.5 px-2 text-xs text-gray-500">
-                        {new Date(m.snapshot_at).toLocaleDateString("en-US", {
+                        {new Date(m.snapshot_at + "Z").toLocaleDateString("en-US", {
                           month: "short",
                           day: "numeric",
                           hour: "numeric",

@@ -6,6 +6,7 @@ import { Plus, Filter, FileText, Search, ArrowUpDown, Sparkles } from "lucide-re
 import PostForm from "../components/PostForm";
 import PostCard from "../components/PostCard";
 import MetricsForm from "../components/MetricsForm";
+import { useToast } from "../components/Toast";
 
 interface Post {
   id: number;
@@ -14,11 +15,13 @@ interface Post {
   post_url: string | null;
   post_type: string;
   hook_line: string | null;
+  hook_style: string | null;
   cta_type: string;
   word_count: number;
   posted_at: string | null;
   pillar_id: number | null;
   topic_tags: string;
+  classification?: string | null;
 }
 
 interface Pillar {
@@ -39,9 +42,11 @@ interface Metrics {
   sends: number;
   engagement_score: number;
   snapshot_type: string | null;
+  snapshot_at: string;
 }
 
 const PostsPage = memo(function PostsPage() {
+  const toast = useToast();
   const [posts, setPosts] = useState<Post[]>([]);
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [metricsMap, setMetricsMap] = useState<Record<number, Metrics>>({});
@@ -52,6 +57,7 @@ const PostsPage = memo(function PostsPage() {
   const [filterAuthor, setFilterAuthor] = useState<string>("");
   const [filterPillar, setFilterPillar] = useState<string>("");
   const [filterType, setFilterType] = useState<string>("");
+  const [filterClassification, setFilterClassification] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date");
   const [analyzing, setAnalyzing] = useState<number | null>(null);
@@ -98,11 +104,15 @@ const PostsPage = memo(function PostsPage() {
   }, [fetchPosts, fetchPillars]);
 
   const handleCreatePost = async (data: Record<string, unknown>) => {
-    await fetch("/api/linkedin/posts", {
+    const res = await fetch("/api/linkedin/posts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+    if (!res.ok) {
+      toast.error("Failed to save post. Please try again.");
+      throw new Error("Failed to create post");
+    }
     setShowForm(false);
     fetchPosts();
   };
@@ -117,11 +127,15 @@ const PostsPage = memo(function PostsPage() {
 
   const handleUpdatePost = async (data: Record<string, unknown>) => {
     if (!editingPost) return;
-    await fetch(`/api/linkedin/posts/${editingPost.id}`, {
+    const res = await fetch(`/api/linkedin/posts/${editingPost.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+    if (!res.ok) {
+      toast.error("Failed to update post. Please try again.");
+      throw new Error("Failed to update post");
+    }
     setEditingPost(null);
     fetchPosts();
   };
@@ -135,14 +149,13 @@ const PostsPage = memo(function PostsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    const result = await res.json();
+    if (!res.ok) {
+      toast.error("Failed to save metrics. Please try again.");
+      return;
+    }
     setMetricsPostId(null);
     fetchPosts();
-    if (result.analysis) {
-      alert(
-        `Metrics saved & auto-analyzed!\nClassification: ${result.analysis.classification}\nLearnings extracted: ${result.analysis.learnings_extracted}\nPlaybook updated: ${result.analysis.playbook_updated ? "Yes" : "No"}`
-      );
-    }
+    toast.success("Metrics saved — AI analysis running in background.");
   };
 
   const handleAnalyze = async (postId: number) => {
@@ -152,11 +165,11 @@ const PostsPage = memo(function PostsPage() {
         method: "POST",
       });
       const data = await res.json();
-      alert(
-        `Analysis complete!\nClassification: ${data.classification}\nLearnings extracted: ${data.learnings_extracted}`
-      );
+      const cls = data.classification ? ` · ${data.classification}` : "";
+      toast.success(`Analysis complete${cls} — ${data.learnings_extracted} learnings extracted.`);
+      fetchPosts();
     } catch {
-      alert("Analysis failed. Make sure the post has metrics.");
+      toast.error("Analysis failed. Make sure the post has metrics.");
     } finally {
       setAnalyzing(null);
     }
@@ -168,7 +181,7 @@ const PostsPage = memo(function PostsPage() {
     if (!confirm(`Analyze all ${postIds.length} posts with AI? This uses batch processing to minimize API calls.`)) return;
     setBatchAnalyzing(true);
     try {
-      const res = await fetch("/api/linkedin/analyze/batch", {
+      const res = await fetch("/api/linkedin/analyze/batch?force=true", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(postIds),
@@ -186,11 +199,11 @@ const PostsPage = memo(function PostsPage() {
       const totalLearnings = results.reduce((sum: number, r: { learnings_extracted: number }) => sum + r.learnings_extracted, 0);
       const alreadyAnalyzed = skipped.filter((s: { reason: string }) => s.reason?.includes("Already analyzed")).length;
       const noMetrics = skipped.length - alreadyAnalyzed;
-      alert(
-        `Batch analysis complete!\n\nAnalyzed: ${results.length} posts\nHits: ${hits} | Average: ${avg} | Misses: ${misses}\nTotal learnings extracted: ${totalLearnings}${alreadyAnalyzed ? `\nSkipped (up to date): ${alreadyAnalyzed}` : ""}${noMetrics ? `\nSkipped (no metrics): ${noMetrics}` : ""}\nPlaybook updated: ${data.playbook_updated ? "Yes" : "No"}`
-      );
+      const summary = `${results.length} analyzed · ${hits} hits · ${avg} avg · ${misses} misses · ${totalLearnings} learnings${alreadyAnalyzed ? ` · ${alreadyAnalyzed} skipped` : ""}${noMetrics ? ` · ${noMetrics} no metrics` : ""}`;
+      toast.success(`Batch analysis complete — ${summary}`);
+      fetchPosts();
     } catch {
-      alert("Batch analysis failed. Make sure your posts have metrics.");
+      toast.error("Batch analysis failed. Make sure your posts have metrics.");
     } finally {
       setBatchAnalyzing(false);
     }
@@ -212,10 +225,11 @@ const PostsPage = memo(function PostsPage() {
 
   const pillarMap = Object.fromEntries(pillars.map((p) => [p.id, p]));
 
-  // Client-side search, type filter, and sorting
+  // Client-side search, type filter, classification filter, and sorting
   const filteredPosts = posts
     .filter((post) => {
       if (filterType && post.post_type !== filterType) return false;
+      if (filterClassification && post.classification !== filterClassification) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const tags = (() => { try { return JSON.parse(post.topic_tags || "[]"); } catch { return []; } })();
@@ -319,9 +333,21 @@ const PostsPage = memo(function PostsPage() {
             <option value="">All types</option>
             <option value="text">Text</option>
             <option value="carousel">Carousel</option>
+            <option value="personal image">Personal Image</option>
+            <option value="Social Proof Image">Social Proof Image</option>
             <option value="poll">Poll</option>
             <option value="video">Video</option>
             <option value="article">Article</option>
+          </select>
+          <select
+            value={filterClassification}
+            onChange={(e) => setFilterClassification(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-gray-50 focus:bg-white transition-colors"
+          >
+            <option value="">All results</option>
+            <option value="hit">Hit</option>
+            <option value="average">Average</option>
+            <option value="miss">Miss</option>
           </select>
           <div className="ml-auto flex items-center gap-2">
             <ArrowUpDown className="w-4 h-4 text-gray-400" />

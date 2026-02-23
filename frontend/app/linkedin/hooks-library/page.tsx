@@ -12,13 +12,13 @@ interface Hook {
 }
 
 const HOOK_STYLES = [
-  "question",
-  "contrarian",
-  "story",
-  "stat",
-  "cliffhanger",
-  "list",
-  "statement",
+  "Question",
+  "Contrarian",
+  "Story",
+  "Stat",
+  "Cliffhanger",
+  "List",
+  "Statement",
 ];
 
 const HooksLibraryPage = memo(function HooksLibraryPage() {

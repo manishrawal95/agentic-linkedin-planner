@@ -2,8 +2,8 @@
 AI draft generation — gathers context and produces post variants.
 
 Flow:
-  1. gather_context(pillar_id) → playbook + top posts + hooks + hashtags
-  2. generate_draft(topic, context, style) → 2-3 variants
+  1. gather_context(pillar_id) → playbook + top_learnings + hit posts + hooks + hashtags
+  2. generate_drafts(topic, context, style) → 2-3 variants
 """
 
 from __future__ import annotations
@@ -27,17 +27,40 @@ def gather_context(pillar_id: int | None = None) -> dict:
     ).fetchone()
     playbook = playbook_row["content"] if playbook_row else "No playbook generated yet."
 
+    # Voice reference: prefer hit posts (latest snapshot), then average, then unclassified
     top_posts = conn.execute("""
-        SELECT p.content, ms.engagement_score
+        SELECT p.content, ms.engagement_score, ms.saves, p.classification
         FROM posts p
-        JOIN metrics_snapshots ms ON ms.post_id = p.id
+        INNER JOIN (
+            SELECT post_id, MAX(snapshot_at) AS max_at FROM metrics_snapshots GROUP BY post_id
+        ) latest ON p.id = latest.post_id
+        JOIN metrics_snapshots ms ON ms.post_id = p.id AND ms.snapshot_at = latest.max_at
         WHERE p.author = 'me'
-        ORDER BY ms.engagement_score DESC
+        ORDER BY
+            CASE WHEN p.classification = 'hit' THEN 0
+                 WHEN p.classification = 'average' THEN 1
+                 ELSE 2 END,
+            ms.saves DESC,
+            ms.engagement_score DESC
         LIMIT 5
     """).fetchall()
     voice_reference = "\n---\n".join(
-        f"[Score: {r['engagement_score']:.4f}]\n{r['content'][:300]}" for r in top_posts
+        f"[{r['classification'] or 'unclassified'}, {r['saves']} saves]\n{r['content'][:400]}"
+        for r in top_posts
     ) or "No posts with metrics yet."
+
+    # Top learnings: high confidence, sorted by evidence strength (times_confirmed × confidence)
+    top_learnings_rows = conn.execute("""
+        SELECT insight, category, impact, confidence, times_confirmed
+        FROM learnings
+        WHERE confidence >= 0.65
+        ORDER BY (times_confirmed * confidence) DESC
+        LIMIT 15
+    """).fetchall()
+    top_learnings_text = "\n".join(
+        f"- [{r['category']}] {r['insight']} | {r['impact']} (confirmed {r['times_confirmed']}x, confidence {r['confidence']:.2f})"
+        for r in top_learnings_rows
+    ) or "No confirmed learnings yet."
 
     hooks_query = "SELECT text, style, avg_engagement_score FROM hooks ORDER BY avg_engagement_score DESC NULLS LAST LIMIT 10"
     hooks = conn.execute(hooks_query).fetchall()
@@ -68,6 +91,7 @@ def gather_context(pillar_id: int | None = None) -> dict:
     return {
         "playbook": playbook,
         "voice_reference": voice_reference,
+        "top_learnings": top_learnings_text,
         "hooks": hooks_text,
         "hashtags": hashtags_text,
         "pillar_name": pillar_name or "General",
@@ -90,6 +114,7 @@ async def generate_drafts(
         pillar_description=context["pillar_description"],
         style=style or "professional, engaging",
         playbook=context["playbook"][:1500],
+        top_learnings=context["top_learnings"],
         voice_reference=context["voice_reference"][:1500],
         hooks=context["hooks"],
         hashtags=context["hashtags"],

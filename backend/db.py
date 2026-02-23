@@ -203,11 +203,14 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             logger.info("Added column %s to metrics_snapshots", col_name)
     conn.commit()
 
-    # Migrate: add last_analyzed_at to posts if missing
+    # Migrate: add last_analyzed_at and classification to posts if missing
     post_cols = {row[1] for row in conn.execute("PRAGMA table_info(posts)").fetchall()}
     if "last_analyzed_at" not in post_cols:
         conn.execute("ALTER TABLE posts ADD COLUMN last_analyzed_at TEXT")
         logger.info("Added column last_analyzed_at to posts")
+    if "classification" not in post_cols:
+        conn.execute("ALTER TABLE posts ADD COLUMN classification TEXT")
+        logger.info("Added column classification to posts")
     conn.commit()
 
     # Migrate: add mood_board_item_id to drafts if missing

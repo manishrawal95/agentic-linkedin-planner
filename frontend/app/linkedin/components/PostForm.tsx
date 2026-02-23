@@ -16,9 +16,9 @@ interface PostFormProps {
   initial?: Record<string, unknown>;
 }
 
-const POST_TYPES = ["text", "carousel", "image", "poll", "video", "article"];
+const POST_TYPES = ["text", "carousel", "personal image", "Social Proof Image", "poll", "video", "article"];
 const CTA_TYPES = ["none", "question", "link", "engagement-bait", "advice"];
-const HOOK_STYLES = ["", "question", "contrarian", "story", "stat", "cliffhanger", "list", "statement"];
+const HOOK_STYLES = ["", "Question", "Contrarian", "Story", "Stat", "Cliffhanger", "List", "Statement"];
 
 const PostForm = memo(function PostForm({
   pillars,

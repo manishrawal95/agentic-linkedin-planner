@@ -60,6 +60,7 @@ const CalendarPage = memo(function CalendarPage() {
   const [showAdd, setShowAdd] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<unknown[] | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [markPostModal, setMarkPostModal] = useState<CalendarEntry | null>(null);
   const [postForm, setPostForm] = useState({
     content: "",
@@ -175,6 +176,10 @@ const CalendarPage = memo(function CalendarPage() {
         cta_type: "none",
       }),
     });
+    if (!postRes.ok) {
+      alert("Failed to create post record. Please try again.");
+      return;
+    }
     const postData = await postRes.json();
 
     // Update calendar entry to posted
@@ -202,12 +207,14 @@ const CalendarPage = memo(function CalendarPage() {
 
   const handleGetSuggestions = async () => {
     setLoadingSuggestions(true);
+    setSuggestionsError(null);
     try {
       const res = await fetch("/api/linkedin/calendar/suggestions");
+      if (!res.ok) throw new Error("Server error — try again later");
       const data = await res.json();
       setSuggestions(data.suggestions || []);
-    } catch {
-      // failed
+    } catch (err) {
+      setSuggestionsError(err instanceof Error ? err.message : "Failed to load suggestions");
     } finally {
       setLoadingSuggestions(false);
     }
@@ -248,6 +255,16 @@ const CalendarPage = memo(function CalendarPage() {
           {loadingSuggestions ? "Loading..." : "AI Suggestions"}
         </button>
       </div>
+
+      {/* Suggestions error */}
+      {suggestionsError && (
+        <div className="bg-red-50 rounded-xl border border-red-200 p-4 flex items-center justify-between">
+          <p className="text-sm text-red-700">{suggestionsError}</p>
+          <button onClick={() => setSuggestionsError(null)} className="text-xs text-red-500 hover:underline ml-4">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Suggestions */}
       {suggestions && (
@@ -572,6 +589,8 @@ const CalendarPage = memo(function CalendarPage() {
                 >
                   <option value="text">Text</option>
                   <option value="carousel">Carousel</option>
+                  <option value="personal image">Personal Image</option>
+                  <option value="Social Proof Image">Social Proof Image</option>
                   <option value="poll">Poll</option>
                   <option value="video">Video</option>
                   <option value="article">Article</option>

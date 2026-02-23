@@ -33,7 +33,7 @@ async def _generate_gemini(prompt: str, system: str) -> str:
     max_retries = 5
     for attempt in range(max_retries):
         try:
-            response = client.models.generate_content(
+            response = await client.aio.models.generate_content(
                 model=config.GEMINI_MODEL,
                 contents=full_prompt,
                 config=genai.types.GenerateContentConfig(
@@ -54,7 +54,7 @@ async def _generate_gemini(prompt: str, system: str) -> str:
 async def _generate_claude(prompt: str, system: str) -> str:
     import anthropic
 
-    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    client = anthropic.AsyncAnthropic(api_key=config.ANTHROPIC_API_KEY)
 
     kwargs = {
         "model": config.CLAUDE_MODEL,
@@ -65,7 +65,7 @@ async def _generate_claude(prompt: str, system: str) -> str:
     if system:
         kwargs["system"] = system
 
-    response = client.messages.create(**kwargs)
+    response = await client.messages.create(**kwargs)
     return response.content[0].text
 
 

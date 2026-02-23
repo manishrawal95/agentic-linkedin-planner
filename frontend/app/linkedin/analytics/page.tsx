@@ -124,6 +124,9 @@ function formatMonth(raw: string | null | undefined): string {
 const TYPE_COLORS: Record<string, string> = {
   text: "#6366f1",
   carousel: "#f59e0b",
+  "personal image": "#059669",
+  "Social Proof Image": "#0d9488",
+  image: "#059669",
   poll: "#10b981",
   video: "#ef4444",
   article: "#8b5cf6",
@@ -481,73 +484,51 @@ const AnalyticsPage = memo(function AnalyticsPage() {
             Hook Style Analysis
           </h2>
           {hookData.length > 0 ? (
-            <>
-              {hookData.length >= 3 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <RadarChart data={hookData} cx="50%" cy="50%" outerRadius="70%">
-                    <PolarGrid stroke="#e5e7eb" />
-                    <PolarAngleAxis
-                      dataKey="label"
-                      tick={{ fontSize: 11, fill: "#111827" }}
-                    />
-                    <PolarRadiusAxis
-                      tick={{ fontSize: 10, fill: "#111827" }}
-                      stroke="#3949AB"
-                      tickFormatter={(v) => `${v}%`}
-                    />
-                    <Radar
-                      name="Avg Engagement"
-                      dataKey="engagementPct"
-                      stroke="#6366f1"
-                      fill="#6366f1"
-                      fillOpacity={0.2}
-                      strokeWidth={2}
-                    />
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      formatter={(value: number | undefined) => [`${value ?? 0}%`, "Avg Engagement"]}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={hookData} margin={{ bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#111827" }} stroke="#3949AB" />
-                    <YAxis tick={{ fontSize: 11, fill: "#111827" }} stroke="#3949AB" unit="%" />
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      formatter={(value: number | undefined) => [`${value ?? 0}%`, "Avg Engagement"]}
-                    />
-                    <Bar dataKey="engagementPct" radius={[4, 4, 0, 0]} barSize={32}>
-                      {hookData.map((h) => (
-                        <Cell
-                          key={h.style}
-                          fill={HOOK_STYLE_COLORS[h.style] || "#6366f1"}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {hookData.map((h) => (
-                  <span
-                    key={h.style}
-                    className="inline-flex items-center gap-1.5 text-xs bg-gray-50 rounded-lg px-3 py-1.5 border border-gray-100"
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: HOOK_STYLE_COLORS[h.style] || "#6366f1" }}
-                    />
-                    <span className="text-gray-700 font-medium capitalize">{h.style}</span>
-                    <span className="bg-indigo-100 text-indigo-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-md">
-                      {h.count}x
-                    </span>
-                  </span>
-                ))}
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 mb-1">
+                <span className="w-5 shrink-0" />
+                <span className="w-24 shrink-0" />
+                <span className="flex-1" />
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide w-12 text-right shrink-0">Eng %</span>
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide shrink-0">Used</span>
               </div>
-            </>
+              {[...hookData]
+                .sort((a, b) => b.engagementPct - a.engagementPct)
+                .map((h, i, arr) => {
+                  const maxPct = arr[0].engagementPct || 1;
+                  return (
+                    <div key={h.style} className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-gray-300 w-5 shrink-0 text-right">
+                        #{i + 1}
+                      </span>
+                      <div className="flex items-center gap-1.5 w-24 shrink-0">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: HOOK_STYLE_COLORS[h.style] || "#6366f1" }}
+                        />
+                        <span className="text-xs font-medium text-gray-700 capitalize truncate">
+                          {h.style}
+                        </span>
+                      </div>
+                      <div className="flex-1 bg-gray-100 rounded-full h-2">
+                        <div
+                          className="h-2 rounded-full transition-all"
+                          style={{
+                            width: `${(h.engagementPct / maxPct) * 100}%`,
+                            backgroundColor: HOOK_STYLE_COLORS[h.style] || "#6366f1",
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-600 w-12 text-right shrink-0">
+                        {h.engagementPct}%
+                      </span>
+                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 shrink-0">
+                        {h.count}×
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
           ) : (
             <EmptyState message="Tag hooks on your posts to analyze style performance" />
           )}

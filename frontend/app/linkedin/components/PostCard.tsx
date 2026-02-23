@@ -31,6 +31,7 @@ interface Post {
   posted_at: string | null;
   pillar_id: number | null;
   topic_tags: string;
+  classification?: string | null;
 }
 
 interface ExpandedMetrics {
@@ -45,6 +46,7 @@ interface ExpandedMetrics {
   sends: number;
   engagement_score: number;
   snapshot_type: string | null;
+  snapshot_at: string;
 }
 
 interface PostCardProps {
@@ -58,13 +60,18 @@ interface PostCardProps {
   onDelete: (postId: number) => void;
 }
 
-const SNAPSHOT_LABELS: Record<string, string> = {
-  "12h": "12 hours",
-  "24h": "24 hours",
-  "48h": "48 hours",
-  "1w": "1 week",
-  later: "1w+",
-};
+function formatElapsed(snapshotAt: string, postedAt: string | null): string | null {
+  if (!postedAt) return null;
+  const ms = new Date(snapshotAt + "Z").getTime() - new Date(postedAt).getTime();
+  if (ms < 0) return null;
+  const totalMins = Math.floor(ms / 60000);
+  const days = Math.floor(totalMins / 1440);
+  const hours = Math.floor((totalMins % 1440) / 60);
+  const mins = totalMins % 60;
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  return `${mins}m`;
+}
 
 const PostCard = memo(function PostCard({
   post,
@@ -87,6 +94,8 @@ const PostCard = memo(function PostCard({
   const typeColors: Record<string, string> = {
     text: "bg-gray-100 text-gray-600",
     carousel: "bg-orange-100 text-orange-700",
+    "personal image": "bg-emerald-100 text-emerald-700",
+    "Social Proof Image": "bg-teal-100 text-teal-700",
     image: "bg-emerald-100 text-emerald-700",
     poll: "bg-cyan-100 text-cyan-700",
     video: "bg-red-100 text-red-700",
@@ -132,6 +141,21 @@ const PostCard = memo(function PostCard({
                   {post.cta_type}
                 </span>
               )}
+              {post.classification === "hit" && (
+                <span className="text-xs font-medium px-2 py-1 rounded-md bg-green-100 text-green-700">
+                  🔥 Hit
+                </span>
+              )}
+              {post.classification === "average" && (
+                <span className="text-xs font-medium px-2 py-1 rounded-md bg-amber-100 text-amber-700">
+                  Avg
+                </span>
+              )}
+              {post.classification === "miss" && (
+                <span className="text-xs font-medium px-2 py-1 rounded-md bg-red-100 text-red-700">
+                  Miss
+                </span>
+              )}
               {post.posted_at && (
                 <span className="text-xs text-gray-400 ml-auto">
                   {new Date(post.posted_at).toLocaleDateString("en-US", {
@@ -165,12 +189,12 @@ const PostCard = memo(function PostCard({
             {/* Expanded Metrics */}
             {latestMetrics && (
               <div className="mt-3 pt-3 border-t border-gray-100">
-                {/* Snapshot type badge */}
-                {latestMetrics.snapshot_type && (
+                {/* Elapsed time since post */}
+                {formatElapsed(latestMetrics.snapshot_at, post.posted_at) && (
                   <div className="flex items-center gap-1.5 mb-2">
                     <Clock className="w-3 h-3 text-gray-400" />
                     <span className="text-xs text-gray-400">
-                      Snapshot at {SNAPSHOT_LABELS[latestMetrics.snapshot_type] || latestMetrics.snapshot_type}
+                      Snapshot at {formatElapsed(latestMetrics.snapshot_at, post.posted_at)} after posting
                     </span>
                   </div>
                 )}

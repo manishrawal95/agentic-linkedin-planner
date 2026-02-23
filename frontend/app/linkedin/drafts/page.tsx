@@ -128,9 +128,13 @@ const DraftsPage = memo(function DraftsPage() {
     if (publishForm.post_type) params.set("post_type", publishForm.post_type);
     if (publishForm.posted_at) params.set("posted_at", publishForm.posted_at);
 
-    await fetch(`/api/linkedin/drafts/${publishModal.id}/publish?${params}`, {
+    const res = await fetch(`/api/linkedin/drafts/${publishModal.id}/publish?${params}`, {
       method: "POST",
     });
+    if (!res.ok) {
+      alert("Failed to publish draft. Please try again.");
+      return;
+    }
     setPublishModal(null);
     setPublishForm({ post_url: "", post_type: "text", posted_at: "" });
     fetchDrafts();
@@ -139,7 +143,7 @@ const DraftsPage = memo(function DraftsPage() {
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scheduleModal) return;
-    await fetch("/api/linkedin/calendar", {
+    const res = await fetch("/api/linkedin/calendar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -151,6 +155,10 @@ const DraftsPage = memo(function DraftsPage() {
         notes: scheduleModal.topic,
       }),
     });
+    if (!res.ok) {
+      alert("Failed to schedule draft. Please try again.");
+      return;
+    }
     setScheduleModal(null);
     setScheduleForm({ date: "", time: "" });
   };
@@ -543,6 +551,8 @@ const DraftsPage = memo(function DraftsPage() {
               >
                 <option value="text">Text</option>
                 <option value="carousel">Carousel</option>
+                <option value="personal image">Personal Image</option>
+                <option value="Social Proof Image">Social Proof Image</option>
                 <option value="poll">Poll</option>
                 <option value="video">Video</option>
                 <option value="article">Article</option>

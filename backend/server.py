@@ -9,7 +9,7 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend import config
@@ -267,32 +267,9 @@ async def add_metrics(post_id: int, req: MetricsCreate):
         raise HTTPException(404, f"Post {post_id} not found")
 
     interaction_score = req.comments * 3 + req.reposts * 2 + req.saves * 2 + req.sends * 1.5 + req.likes
-    engagement_score = None
-    if req.impressions > 0:
-        engagement_score = interaction_score / req.impressions
+    engagement_score = (interaction_score / req.impressions) if req.impressions > 0 else 0.0
 
-    # Auto-calculate snapshot_type from posted_at
     snapshot_type = None
-    if post["posted_at"]:
-        try:
-            posted_dt = datetime.fromisoformat(post["posted_at"].replace("Z", "+00:00"))
-            now = datetime.utcnow()
-            if posted_dt.tzinfo:
-                from datetime import timezone
-                now = now.replace(tzinfo=timezone.utc)
-            delta_hours = (now - posted_dt).total_seconds() / 3600
-            if delta_hours < 18:
-                snapshot_type = "12h"
-            elif delta_hours < 36:
-                snapshot_type = "24h"
-            elif delta_hours < 72:
-                snapshot_type = "48h"
-            elif delta_hours < 240:
-                snapshot_type = "1w"
-            else:
-                snapshot_type = "later"
-        except (ValueError, TypeError):
-            snapshot_type = None
 
     cur = conn.execute(
         """INSERT INTO metrics_snapshots
@@ -308,19 +285,20 @@ async def add_metrics(post_id: int, req: MetricsCreate):
         "SELECT * FROM metrics_snapshots WHERE id = ?", (cur.lastrowid,)
     ).fetchone()
 
-    # Auto-analyze post after metrics are added
-    analysis_result = None
-    try:
-        from backend.analyzer import analyze_post as _analyze
-        analysis_result = await _analyze(post_id)
-        logger.info("Auto-analysis complete for post %d: %s", post_id, analysis_result.get("classification"))
-    except Exception as e:
-        logger.warning("Auto-analysis failed for post %d: %s", post_id, e)
+    # Auto-analyze post in background (non-blocking)
+    import asyncio
+    from backend.analyzer import analyze_post as _analyze
 
-    result = {"snapshot": _row_to_dict(snapshot)}
-    if analysis_result:
-        result["analysis"] = analysis_result
-    return result
+    async def _run_analysis():
+        try:
+            result = await _analyze(post_id)
+            logger.info("Auto-analysis complete for post %d: %s", post_id, result.get("classification"))
+        except Exception as e:
+            logger.warning("Auto-analysis failed for post %d: %s", post_id, e)
+
+    asyncio.create_task(_run_analysis())
+
+    return {"snapshot": _row_to_dict(snapshot)}
 
 
 @app.get("/posts/{post_id}/metrics")
@@ -1196,7 +1174,9 @@ async def dashboard_analytics():
         LIMIT 5
     """).fetchall()
 
-    bottom_posts = conn.execute("""
+    top_post_ids = [r["id"] for r in top_posts]
+    exclude = ",".join("?" * len(top_post_ids)) if top_post_ids else "NULL"
+    bottom_posts = conn.execute(f"""
         SELECT p.id, p.content, p.post_type, p.word_count, p.posted_at,
                ms.engagement_score, ms.impressions, ms.likes, ms.comments
         FROM posts p
@@ -1205,10 +1185,10 @@ async def dashboard_analytics():
                    ROW_NUMBER() OVER (PARTITION BY post_id ORDER BY snapshot_at DESC) as rn
             FROM metrics_snapshots
         ) ms ON ms.post_id = p.id AND ms.rn = 1
-        WHERE p.author = 'me'
+        WHERE p.author = 'me' AND p.id NOT IN ({exclude})
         ORDER BY ms.engagement_score ASC
         LIMIT 5
-    """).fetchall()
+    """, top_post_ids).fetchall()
 
     return {
         "pillar_performance": _rows_to_list(pillar_perf),
@@ -1224,7 +1204,7 @@ async def dashboard_analytics():
 # ── AI: Analyze ──────────────────────────────────────────────────
 
 @app.post("/analyze/batch")
-async def analyze_batch(post_ids: list[int] = Body(...)):
+async def analyze_batch(post_ids: list[int] = Body(...), force: bool = Query(False)):
     """Batch AI analysis on multiple posts — fewer LLM calls than analyzing individually."""
     from backend.analyzer import analyze_batch as _analyze_batch
 
@@ -1232,7 +1212,7 @@ async def analyze_batch(post_ids: list[int] = Body(...)):
         raise HTTPException(400, "post_ids list is required")
 
     try:
-        result = await _analyze_batch(post_ids)
+        result = await _analyze_batch(post_ids, force=force)
         return result
     except Exception as e:
         logger.exception("Batch analysis failed")
