@@ -3,7 +3,7 @@
 > **Your LinkedIn posts teach AI how to write your next ones.**
 > Add metrics → AI builds your playbook → AI drafts in your voice → You review → Post. Runs locally. No SaaS subscription.
 
-[Live Demo →](#)
+[Live Demo →](https://linkedin-planner.vercel.app/linkedin)
 
 ---
 
