@@ -12,13 +12,12 @@ import {
   Anchor,
   BookOpen,
   BarChart3,
-  Hash,
-  Users,
-  Layers,
   Menu,
-  Brain,
-  Lightbulb,
   User,
+  Settings,
+  Lightbulb,
+  Layers,
+  Users,
 } from "lucide-react";
 import {
   Sheet,
@@ -30,17 +29,17 @@ import { Button } from "@/components/ui/button";
 
 const NAV_SECTIONS = [
   {
-    label: "Overview",
+    label: "",
     items: [
       { href: "/linkedin", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/linkedin/analytics", label: "Analytics", icon: BarChart3 },
     ],
   },
   {
     label: "Content",
     items: [
-      { href: "/linkedin/posts", label: "Posts", icon: FileText },
+      { href: "/linkedin/ideas", label: "Ideas", icon: Lightbulb },
       { href: "/linkedin/drafts", label: "Drafts", icon: PenTool },
+      { href: "/linkedin/posts", label: "Posts", icon: FileText },
       { href: "/linkedin/calendar", label: "Calendar", icon: Calendar },
     ],
   },
@@ -48,18 +47,17 @@ const NAV_SECTIONS = [
     label: "Library",
     items: [
       { href: "/linkedin/mood-board", label: "Mood Board", icon: Palette },
-      { href: "/linkedin/hooks-library", label: "Hooks", icon: Anchor },
-      { href: "/linkedin/hashtags", label: "Hashtags", icon: Hash },
+      { href: "/linkedin/hooks-library", label: "Hooks & Hashtags", icon: Anchor },
       { href: "/linkedin/series", label: "Series", icon: Layers },
+      { href: "/linkedin/competitors", label: "Competitors", icon: Users },
     ],
   },
   {
     label: "Intelligence",
     items: [
-      { href: "/linkedin/profile", label: "Profile", icon: User },
-      { href: "/linkedin/ideas", label: "Ideas", icon: Lightbulb },
-      { href: "/linkedin/memory", label: "Memory", icon: Brain },
-      { href: "/linkedin/competitors", label: "Competitors", icon: Users },
+      { href: "/linkedin/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/linkedin/profile", label: "Profile & Memory", icon: User },
+      { href: "/linkedin/settings", label: "Settings", icon: Settings },
     ],
   },
 ];
@@ -84,9 +82,11 @@ const NavContent = memo(function NavContent({
       <div className="space-y-5 flex-1">
         {NAV_SECTIONS.map((section) => (
           <div key={section.label}>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 px-3 mb-1.5">
-              {section.label}
-            </p>
+            {section.label && (
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 px-3 mb-1.5">
+                {section.label}
+              </p>
+            )}
             <div className="space-y-0.5">
               {section.items.map((item) => {
                 const isActive =

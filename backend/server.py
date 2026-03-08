@@ -111,6 +111,260 @@ async def health():
     return JSONResponse(content=checks, status_code=status_code)
 
 
+# ── Token Usage ─────────────────────────────────────────────────
+
+@app.get("/token-usage/summary")
+async def token_usage_summary():
+    """Token usage summary grouped by feature and period."""
+    conn = get_conn()
+
+    # Total usage by feature (last 30 days)
+    by_feature = conn.execute("""
+        SELECT feature,
+               COUNT(*) as call_count,
+               SUM(input_tokens) as total_input,
+               SUM(output_tokens) as total_output,
+               SUM(input_tokens + output_tokens) as total_tokens,
+               AVG(duration_ms) as avg_duration_ms
+        FROM token_usage
+        WHERE created_at >= datetime('now', '-30 days')
+        GROUP BY feature
+        ORDER BY total_tokens DESC
+    """).fetchall()
+
+    # Daily totals (last 14 days)
+    daily = conn.execute("""
+        SELECT date(created_at) as date,
+               SUM(input_tokens + output_tokens) as total_tokens,
+               COUNT(*) as call_count
+        FROM token_usage
+        WHERE created_at >= datetime('now', '-14 days')
+        GROUP BY date(created_at)
+        ORDER BY date
+    """).fetchall()
+
+    # Grand totals
+    totals = conn.execute("""
+        SELECT COUNT(*) as total_calls,
+               COALESCE(SUM(input_tokens), 0) as total_input,
+               COALESCE(SUM(output_tokens), 0) as total_output,
+               COALESCE(SUM(input_tokens + output_tokens), 0) as total_tokens
+        FROM token_usage
+        WHERE created_at >= datetime('now', '-30 days')
+    """).fetchone()
+
+    return {
+        "by_feature": [dict(r) for r in by_feature],
+        "daily": [dict(r) for r in daily],
+        "totals": dict(totals) if totals else {},
+    }
+
+
+# ── Post Today ──────────────────────────────────────────────────
+
+@app.get("/post-today")
+async def post_today_endpoint():
+    """Find the best draft to post today. Pure SQL, zero LLM calls."""
+    conn = get_conn()
+
+    # Priority 1: Scheduled draft for today/tomorrow
+    scheduled = conn.execute("""
+        SELECT d.id, d.topic, d.content, d.confidence, d.pillar_id,
+               cc.scheduled_date, cc.scheduled_time,
+               cp.name as pillar_name, cp.color as pillar_color
+        FROM content_calendar cc
+        JOIN drafts d ON cc.draft_id = d.id
+        LEFT JOIN content_pillars cp ON d.pillar_id = cp.id
+        WHERE cc.scheduled_date BETWEEN date('now') AND date('now', '+1 day')
+          AND cc.status IN ('planned', 'ready')
+          AND d.status NOT IN ('posted', 'archived')
+        ORDER BY cc.scheduled_date ASC, cc.scheduled_time ASC
+        LIMIT 1
+    """).fetchone()
+
+    if scheduled:
+        return {
+            "found": True,
+            "source": "scheduled",
+            "draft": dict(scheduled),
+        }
+
+    # Priority 2: Highest-confidence unscheduled draft
+    best_draft = conn.execute("""
+        SELECT d.id, d.topic, d.content, d.confidence, d.pillar_id,
+               cp.name as pillar_name, cp.color as pillar_color
+        FROM drafts d
+        LEFT JOIN content_pillars cp ON d.pillar_id = cp.id
+        WHERE d.status IN ('draft', 'revised', 'ready')
+          AND d.id NOT IN (SELECT COALESCE(draft_id, 0) FROM content_calendar WHERE draft_id IS NOT NULL)
+        ORDER BY d.confidence DESC NULLS LAST, d.updated_at DESC
+        LIMIT 1
+    """).fetchone()
+
+    if best_draft:
+        return {
+            "found": True,
+            "source": "best_draft",
+            "draft": dict(best_draft),
+        }
+
+    # Priority 3: Top-scored pending idea (user can approve to generate draft)
+    top_idea = conn.execute("""
+        SELECT i.id, i.topic, i.score, i.hook_style,
+               cp.name as pillar_name, cp.color as pillar_color
+        FROM ideas i
+        LEFT JOIN content_pillars cp ON i.pillar_id = cp.id
+        WHERE i.status = 'pending'
+        ORDER BY i.score DESC
+        LIMIT 1
+    """).fetchone()
+
+    if top_idea:
+        return {
+            "found": True,
+            "source": "idea",
+            "idea": dict(top_idea),
+        }
+
+    return {"found": False, "message": "No drafts or ideas available. Generate some ideas first."}
+
+
+# ── Suggestions ─────────────────────────────────────────────────
+
+@app.get("/suggestions")
+async def suggestions_endpoint():
+    """SQL-powered suggestion engine. Zero LLM calls."""
+    from backend.suggestions import get_suggestions
+    return {"suggestions": get_suggestions()}
+
+
+@app.get("/suggestions/growth-pulse")
+async def growth_pulse_endpoint():
+    """Growth metrics for the pulse widget. Pure SQL."""
+    conn = get_conn()
+
+    # Hit rate: last 10 analyzed posts
+    recent = conn.execute("""
+        SELECT classification
+        FROM posts
+        WHERE author = 'me' AND classification IS NOT NULL
+        ORDER BY last_analyzed_at DESC
+        LIMIT 10
+    """).fetchall()
+
+    recent_classes = [r["classification"] for r in recent]
+    recent_hits = sum(1 for c in recent_classes if c == "hit")
+    recent_rate = recent_hits / len(recent_classes) if recent_classes else 0
+
+    # Overall hit rate
+    total = conn.execute("""
+        SELECT COUNT(*) as total,
+               SUM(CASE WHEN classification = 'hit' THEN 1 ELSE 0 END) as hits
+        FROM posts WHERE author = 'me' AND classification IS NOT NULL
+    """).fetchone()
+    overall_rate = total["hits"] / total["total"] if total and total["total"] > 0 else 0
+
+    # Posts this week
+    posts_this_week = conn.execute("""
+        SELECT COUNT(*) as cnt FROM posts
+        WHERE author = 'me' AND posted_at >= date('now', 'weekday 0', '-7 days')
+    """).fetchone()["cnt"]
+
+    # Target from goals
+    goal = conn.execute("""
+        SELECT target_value FROM goals
+        WHERE metric LIKE '%posts%week%' AND status = 'active'
+        ORDER BY created_at DESC LIMIT 1
+    """).fetchone()
+    posts_target = int(goal["target_value"]) if goal else 3
+
+    # Streak: consecutive weeks with at least one post
+    weeks_with_posts = conn.execute("""
+        SELECT DISTINCT strftime('%Y-%W', posted_at) as yw
+        FROM posts
+        WHERE author = 'me' AND posted_at IS NOT NULL
+        ORDER BY yw DESC
+        LIMIT 52
+    """).fetchall()
+
+    streak = 0
+    from datetime import datetime as dt, timedelta
+    current_yw = dt.now().strftime("%Y-%W")
+    expected = current_yw
+    for row in weeks_with_posts:
+        if row["yw"] == expected or (streak == 0 and row["yw"] == current_yw):
+            streak += 1
+            # Compute previous week
+            d = dt.strptime(expected + "-1", "%Y-%W-%w") - timedelta(weeks=1)
+            expected = d.strftime("%Y-%W")
+        else:
+            break
+
+    # Health score from strategy review
+    sr = conn.execute(
+        "SELECT health_score FROM strategy_reviews WHERE id = 1"
+    ).fetchone()
+    health_score = sr["health_score"] if sr else None
+
+    # Top confirmed learning
+    learning = conn.execute("""
+        SELECT insight FROM learnings
+        WHERE confidence >= 0.6 OR times_confirmed > 1
+        ORDER BY times_confirmed DESC, confidence DESC
+        LIMIT 1
+    """).fetchone()
+
+    return {
+        "hit_rate": {
+            "recent": round(recent_rate, 2),
+            "overall": round(overall_rate, 2),
+            "posts": recent_classes,
+        },
+        "posts_this_week": posts_this_week,
+        "posts_target": posts_target,
+        "streak_weeks": streak,
+        "health_score": health_score,
+        "top_learning": learning["insight"] if learning else None,
+    }
+
+
+@app.get("/suggestions/up-next")
+async def up_next_endpoint():
+    """Next 3 scheduled calendar entries. Pure SQL."""
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT cc.id, cc.scheduled_date, cc.scheduled_time,
+               cc.draft_id, cc.status,
+               d.topic as draft_topic,
+               cp.name as pillar_name, cp.color as pillar_color
+        FROM content_calendar cc
+        LEFT JOIN drafts d ON cc.draft_id = d.id
+        LEFT JOIN content_pillars cp ON cc.pillar_id = cp.id
+        WHERE cc.scheduled_date >= date('now')
+          AND cc.status != 'skipped'
+        ORDER BY cc.scheduled_date ASC, cc.scheduled_time ASC
+        LIMIT 3
+    """).fetchall()
+
+    return {"entries": _rows_to_list(rows)}
+
+
+# ── Morning Briefing ────────────────────────────────────────────
+
+@app.get("/briefing")
+async def get_briefing():
+    """Morning briefing -- one cached LLM call per session."""
+    from backend.briefing import generate_briefing
+    return await generate_briefing()
+
+
+@app.post("/briefing/refresh")
+async def refresh_briefing():
+    """Force-regenerate the morning briefing."""
+    from backend.briefing import generate_briefing
+    return await generate_briefing(force=True)
+
+
 # ── Posts ────────────────────────────────────────────────────────
 
 @app.get("/posts")
@@ -317,6 +571,10 @@ async def add_metrics(post_id: int, req: MetricsCreate):
             logger.warning("Auto-analysis failed for post %d: %s", post_id, e)
 
     asyncio.create_task(_run_analysis())
+
+    # Invalidate morning briefing cache after new data
+    from backend.briefing import invalidate_cache
+    invalidate_cache()
 
     return {"snapshot": _row_to_dict(snapshot)}
 
@@ -711,7 +969,7 @@ async def _auto_fill_from_draft(content: str, conn=None) -> dict:
 
     try:
         from backend.utils import parse_llm_json
-        raw = await generate(_prompts.AUTO_FILL.format(content=content, pillars_text=pillars_text))
+        raw = await generate(_prompts.AUTO_FILL.format(content=content, pillars_text=pillars_text), feature="auto_fill")
         result = parse_llm_json(raw)
         return {
             "hook_line": result.get("hook_line", ""),
@@ -1541,7 +1799,7 @@ async def dashboard_post_ideas(body: PostIdeasRequest = Body(default=PostIdeasRe
             best_hook=best_hook,
             recent_topics=recent_topics_str,
         )
-    result = await generate(prompt_text)
+    result = await generate(prompt_text, feature="post_ideas")
 
     try:
         from backend.utils import parse_llm_json
@@ -1565,6 +1823,60 @@ IMPROVE_ACTIONS = {
     "conversational": "First person, shorter sentences, no jargon. Sound human.",
     "apply-playbook": "Apply these rules strictly:\n{playbook_rules}",
 }
+
+
+@app.get("/drafts/{draft_id}/context")
+async def draft_context(draft_id: int):
+    """Ambient context for draft editor. Pure SQL, zero LLM calls."""
+    conn = get_conn()
+    draft = conn.execute("SELECT * FROM drafts WHERE id = ?", (draft_id,)).fetchone()
+    if not draft:
+        raise HTTPException(404, f"Draft {draft_id} not found")
+
+    # Word count sweet spot from creator memory
+    word_sweet_spot = None
+    mem = conn.execute("SELECT content_dna FROM creator_memory WHERE id = 1").fetchone()
+    if mem:
+        import json as _json
+        try:
+            dna = _json.loads(mem["content_dna"]) if isinstance(mem["content_dna"], str) else mem["content_dna"]
+            lss = dna.get("length_sweet_spot", {})
+            if lss and lss.get("optimal_range"):
+                word_sweet_spot = lss["optimal_range"]
+        except (Exception,):
+            pass
+
+    # Top hook performances from content DNA
+    hook_performance = []
+    if mem:
+        try:
+            dna = _json.loads(mem["content_dna"]) if isinstance(mem["content_dna"], str) else mem["content_dna"]
+            hooks = dna.get("hook_performance", [])
+            hook_performance = sorted(hooks, key=lambda h: h.get("avg_engagement", 0), reverse=True)[:3]
+        except (Exception,):
+            pass
+
+    # Similar past posts (same pillar)
+    similar_posts = []
+    if draft["pillar_id"]:
+        rows = conn.execute("""
+            SELECT p.id, p.content, p.classification
+            FROM posts p
+            WHERE p.pillar_id = ? AND p.author = 'me'
+            ORDER BY p.posted_at DESC
+            LIMIT 3
+        """, (draft["pillar_id"],)).fetchall()
+        similar_posts = [
+            {"id": r["id"], "content_preview": r["content"][:80], "classification": r["classification"]}
+            for r in rows
+        ]
+
+    return {
+        "word_sweet_spot": word_sweet_spot,
+        "hook_performance": hook_performance,
+        "similar_posts": similar_posts,
+        "confidence": draft["confidence"],
+    }
 
 
 @app.post("/drafts/{draft_id}/improve")
@@ -1597,7 +1909,7 @@ async def improve_draft(draft_id: int, body: ImproveDraftRequest = Body(...)):
         content=draft["content"],
         playbook_context=playbook_context,
     )
-    improved = await generate(prompt_text)
+    improved = await generate(prompt_text, feature="improve_draft")
     return {"improved_content": improved.strip()}
 
 
@@ -2147,6 +2459,66 @@ async def trigger_strategy_review():
 
     task_id = create_task("strategy_review", run_strategy_review())
     return {"task_id": task_id, "status": "running"}
+
+
+# ── Settings ─────────────────────────────────────────────────────
+
+SETTINGS_DEFAULTS: dict[str, str] = {
+    "llm_provider": config.LLM_PROVIDER,
+    "llm_temperature": str(config.LLM_TEMPERATURE),
+    "gemini_model": config.GEMINI_MODEL,
+    "claude_model": config.CLAUDE_MODEL,
+    "creator_name": "",
+    "posting_goal_per_week": "3",
+    "default_post_time": "09:00",
+}
+
+
+@app.get("/settings")
+async def get_settings():
+    conn = get_conn()
+    rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
+    saved = {r["key"]: r["value"] for r in rows}
+    # Merge defaults with saved values
+    merged = {**SETTINGS_DEFAULTS, **saved}
+    # Add read-only info
+    merged["active_provider"] = config.LLM_PROVIDER
+    merged["has_gemini_key"] = bool(config.GEMINI_API_KEY)
+    merged["has_anthropic_key"] = bool(config.ANTHROPIC_API_KEY)
+    return merged
+
+
+@app.put("/settings")
+async def update_settings(body: dict = Body(...)):
+    conn = get_conn()
+    allowed_keys = set(SETTINGS_DEFAULTS.keys())
+    now = datetime.now(timezone.utc).isoformat()
+    updated = {}
+    for key, value in body.items():
+        if key not in allowed_keys:
+            continue
+        val_str = str(value).strip()
+        conn.execute(
+            """INSERT INTO app_settings (key, value, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at""",
+            (key, val_str, now),
+        )
+        updated[key] = val_str
+        # Apply runtime config changes
+        if key == "llm_provider" and val_str in ("gemini", "claude"):
+            config.LLM_PROVIDER = val_str
+        elif key == "llm_temperature":
+            try:
+                config.LLM_TEMPERATURE = float(val_str)
+            except ValueError:
+                pass
+        elif key == "gemini_model":
+            config.GEMINI_MODEL = val_str
+        elif key == "claude_model":
+            config.CLAUDE_MODEL = val_str
+    conn.commit()
+    return {"updated": updated}
 
 
 # ── Entrypoint ───────────────────────────────────────────────────

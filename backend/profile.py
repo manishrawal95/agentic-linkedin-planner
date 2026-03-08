@@ -73,7 +73,7 @@ async def _generate_condensed(about_me: str, writing_skill: str) -> str:
         writing_skill=writing_skill.strip() or "(not provided)",
     )
     try:
-        result = await generate(prompt)
+        result = await generate(prompt, feature="profile")
         return result.strip()
     except Exception as e:
         logger.error("Failed to condense profile: %s", e, exc_info=True)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { User, PenTool, Save, RefreshCw, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,49 @@ import { useApi } from "@/hooks/use-api";
 import { toast } from "sonner";
 import type { CreatorProfile } from "@/types/linkedin";
 
+const MemoryPage = lazy(() => import("../memory/page"));
+
 export default function ProfilePage() {
+  const [activeTab, setActiveTab] = useState<"profile" | "memory">("profile");
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Tab bar */}
+      <div className="flex gap-1 bg-stone-100 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setActiveTab("profile")}
+          className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === "profile"
+              ? "bg-white text-stone-900 shadow-sm"
+              : "text-stone-500 hover:text-stone-700"
+          }`}
+        >
+          Profile
+        </button>
+        <button
+          onClick={() => setActiveTab("memory")}
+          className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === "memory"
+              ? "bg-white text-stone-900 shadow-sm"
+              : "text-stone-500 hover:text-stone-700"
+          }`}
+        >
+          Memory
+        </button>
+      </div>
+
+      {activeTab === "profile" ? (
+        <ProfileContent />
+      ) : (
+        <Suspense fallback={<div className="space-y-6"><div className="h-8 w-48 skeleton rounded-lg" /><div className="h-40 skeleton rounded-2xl" /><div className="h-40 skeleton rounded-2xl" /></div>}>
+          <MemoryPage />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function ProfileContent() {
   const { data: profile, loading, error, refetch } = useApi<CreatorProfile>("/api/linkedin/profile");
   const [aboutMe, setAboutMe] = useState<string | null>(null);
   const [writingSkill, setWritingSkill] = useState<string | null>(null);
@@ -54,7 +96,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="space-y-6">
         <div className="h-8 w-48 skeleton rounded-lg" />
         <div className="h-64 skeleton rounded-2xl" />
         <div className="h-64 skeleton rounded-2xl" />
@@ -64,7 +106,7 @@ export default function ProfilePage() {
 
   if (error) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="space-y-6">
         <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">Creator Profile</h1>
         <ErrorCard message={error} onRetry={refetch} />
       </div>
@@ -72,7 +114,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>

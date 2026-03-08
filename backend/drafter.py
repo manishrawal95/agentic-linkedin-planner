@@ -108,7 +108,7 @@ async def generate_drafts(
         num_variants=num_variants,
     )
 
-    result = await generate(prompt_text, system=prompts.SYSTEM_DRAFTER)
+    result = await generate(prompt_text, system=prompts.SYSTEM_DRAFTER, feature="draft")
 
     try:
         from backend.utils import parse_llm_json
@@ -215,7 +215,7 @@ def _score_draft_confidence(content: str, pillar_id: int | None, conn) -> float:
 async def extract_hook_from_post(content: str) -> dict:
     """Extract and classify the hook from a post."""
     prompt_text = prompts.EXTRACT_HOOK.format(content=content[:500])
-    result = await generate(prompt_text)
+    result = await generate(prompt_text, feature="hook_extract")
 
     try:
         from backend.utils import parse_llm_json

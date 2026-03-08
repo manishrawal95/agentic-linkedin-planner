@@ -14,6 +14,8 @@ import {
   Type,
   Anchor,
   FileText,
+  Target,
+  Cpu,
 } from "lucide-react";
 import {
   ComposedChart,
@@ -31,8 +33,14 @@ import {
   Legend,
 } from "recharts";
 
-import type { AnalyticsData, PostEntry } from "@/types/linkedin";
+import type { AnalyticsData, PostEntry, PillarBalance, HeatmapEntry, DashboardStats } from "@/types/linkedin";
 import { Badge } from "@/components/ui/badge";
+import { SectionCard } from "@/components/ui/section-card";
+import { HeatmapGrid } from "../components/HeatmapGrid";
+import StrategyReviewCard from "../components/StrategyReviewCard";
+import PlaybookView from "../components/PlaybookView";
+import GoalTracker from "../components/GoalTracker";
+import TokenUsageWidget from "../components/TokenUsageWidget";
 import {
   chartAxisStyle,
   chartGridStyle,
@@ -54,7 +62,6 @@ function pct(v: number): string {
 
 function formatMonth(raw: string | null | undefined): string {
   if (!raw) return "N/A";
-  // "2024-01" -> "Jan '24"
   const [year, month] = raw.split("-");
   const date = new Date(Number(year), Number(month) - 1);
   const short = date.toLocaleDateString("en-US", { month: "short" });
@@ -82,19 +89,41 @@ const HOOK_STYLE_COLORS: Record<string, string> = {
   statement: "#6b7280",
 };
 
+type TabKey = "performance" | "strategy" | "system";
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "performance", label: "Performance" },
+  { key: "strategy", label: "Strategy" },
+  { key: "system", label: "System" },
+];
+
 /* ── Main Component ───────────────────────────────────────────── */
 
 const AnalyticsPage = memo(function AnalyticsPage() {
+  const [activeTab, setActiveTab] = useState<TabKey>("performance");
   const [data, setData] = useState<AnalyticsData | null>(null);
+  const [pillarBalance, setPillarBalance] = useState<PillarBalance[]>([]);
+  const [heatmap, setHeatmap] = useState<HeatmapEntry[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchAnalytics = useCallback(async () => {
     try {
-      const res = await fetch("/api/linkedin/dashboard/analytics");
-      const json = await res.json();
+      const [analyticsRes, pillarRes, heatmapRes, statsRes] = await Promise.all([
+        fetch("/api/linkedin/dashboard/analytics"),
+        fetch("/api/linkedin/dashboard/pillar-balance"),
+        fetch("/api/linkedin/dashboard/heatmap"),
+        fetch("/api/linkedin/dashboard/stats"),
+      ]);
+      const [json, pillarData, heatmapData, statsData] = await Promise.all([
+        analyticsRes.json(), pillarRes.json(), heatmapRes.json(), statsRes.json(),
+      ]);
       setData(json);
+      setPillarBalance(pillarData.pillars || []);
+      setHeatmap(heatmapData.heatmap || []);
+      setStats(statsData);
     } catch (err) {
-      console.error("AnalyticsPage.fetchAnalytics: GET /api/linkedin/dashboard/analytics failed:", err);
+      console.error("AnalyticsPage.fetchAnalytics: dashboard data fetch failed:", err);
     } finally {
       setLoading(false);
     }
@@ -106,34 +135,84 @@ const AnalyticsPage = memo(function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-600" />
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="max-w-6xl mx-auto space-y-6">
-        <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">
-          Analytics
-        </h1>
-        <div className="mt-8 text-center py-16 bg-white rounded-2xl border border-stone-200/60">
-          <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-            <BarChart3 className="w-8 h-8 text-stone-400" />
-          </div>
-          <p className="text-sm font-medium text-stone-600">
-            No analytics data available
-          </p>
-          <p className="text-xs text-stone-500 mt-1">
-            Add posts with metrics to start seeing insights
-          </p>
+      <div className="max-w-5xl mx-auto space-y-6">
+        {/* Header skeleton */}
+        <div className="space-y-2">
+          <div className="h-7 w-32 skeleton rounded-lg" />
+          <div className="h-4 w-64 skeleton rounded-lg" />
+        </div>
+        {/* Tab bar skeleton */}
+        <div className="h-10 w-80 skeleton rounded-xl" />
+        {/* Main chart card skeleton */}
+        <div className="h-[300px] skeleton rounded-2xl" />
+        {/* Two half-width card skeletons */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-64 skeleton rounded-2xl" />
+          <div className="h-64 skeleton rounded-2xl" />
         </div>
       </div>
     );
   }
 
-  /* Prepare monthly trend data for the composed chart */
+  return (
+    <div className="max-w-5xl mx-auto space-y-6">
+      {/* Header + Tabs */}
+      <div>
+        <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">
+          Analytics
+        </h1>
+        <p className="text-sm text-stone-500 mt-1">
+          Performance, strategy, and system insights
+        </p>
+      </div>
+
+      <div className="flex gap-1 bg-stone-100 rounded-xl p-1 w-fit">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+              activeTab === tab.key
+                ? "bg-white text-stone-900 shadow-sm"
+                : "text-stone-500 hover:text-stone-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "performance" && (
+        <PerformanceTab data={data} />
+      )}
+      {activeTab === "strategy" && (
+        <StrategyTab />
+      )}
+      {activeTab === "system" && (
+        <SystemTab heatmap={heatmap} />
+      )}
+    </div>
+  );
+});
+
+AnalyticsPage.displayName = "AnalyticsPage";
+export default AnalyticsPage;
+
+/* ── Performance Tab ──────────────────────────────────────────── */
+
+function PerformanceTab({ data }: { data: AnalyticsData | null }) {
+  if (!data) {
+    return (
+      <div className="mt-4 text-center py-16 bg-white rounded-2xl border border-stone-200/60">
+        <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+          <BarChart3 className="w-8 h-8 text-stone-400" />
+        </div>
+        <p className="text-sm font-medium text-stone-600">No analytics data available</p>
+        <p className="text-xs text-stone-500 mt-1">Add posts with metrics to start seeing insights</p>
+      </div>
+    );
+  }
+
   const trendData = (data.monthly_trend || [])
     .filter((m) => m.month != null)
     .map((m) => ({
@@ -142,19 +221,16 @@ const AnalyticsPage = memo(function AnalyticsPage() {
       engagementPct: +(m.avg_engagement * 100).toFixed(2),
     }));
 
-  /* Pillar data sorted by avg_engagement desc */
   const pillarData = [...(data.pillar_performance || [])].sort(
     (a, b) => b.avg_engagement - a.avg_engagement
   );
 
-  /* Post type data */
   const typeData = (data.type_performance || []).map((t) => ({
     ...t,
     engagementPct: +(t.avg_engagement * 100).toFixed(2),
     label: t.post_type.charAt(0).toUpperCase() + t.post_type.slice(1),
   }));
 
-  /* Hook performance data */
   const hookData = (data.hook_performance || []).map((h) => ({
     ...h,
     engagementPct: +(h.avg_engagement * 100).toFixed(2),
@@ -162,25 +238,14 @@ const AnalyticsPage = memo(function AnalyticsPage() {
     fullMark: 10,
   }));
 
-  /* Word count scatter data */
   const wordData = (data.word_engagement || []).map((w) => ({
     ...w,
     engagementPct: +(w.engagement_score * 100).toFixed(2),
   }));
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* ── 1. Header ─────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">
-          Analytics
-        </h1>
-        <p className="text-sm text-stone-500 mt-1">
-          Comprehensive performance breakdown across all your content
-        </p>
-      </div>
-
-      {/* ── 2. Monthly Trend (full width) ─────────────────────── */}
+    <div className="space-y-6">
+      {/* Monthly Trend */}
       <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
         <h2 className="text-sm font-semibold text-stone-900 mb-4 flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-stone-400" />
@@ -196,68 +261,27 @@ const AnalyticsPage = memo(function AnalyticsPage() {
                 </linearGradient>
               </defs>
               <CartesianGrid {...chartGridStyle} />
-              <XAxis
-                dataKey="label"
-                tick={chartAxisStyle}
-                stroke={chartGridStyle.stroke}
-              />
-              <YAxis
-                yAxisId="left"
-                tick={chartAxisStyle}
-                stroke={chartGridStyle.stroke}
-                label={{
-                  value: "Posts",
-                  angle: -90,
-                  position: "insideLeft",
-                  style: { fontSize: 11, fill: CHART_COLORS.secondary },
-                }}
-              />
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                tick={chartAxisStyle}
-                stroke={chartGridStyle.stroke}
-                unit="%"
-                label={{
-                  value: "Engagement",
-                  angle: 90,
-                  position: "insideRight",
-                  style: { fontSize: 11, fill: CHART_COLORS.secondary },
-                }}
-              />
-              <Tooltip
-                contentStyle={chartTooltipStyle.contentStyle}
+              <XAxis dataKey="label" tick={chartAxisStyle} stroke={chartGridStyle.stroke} />
+              <YAxis yAxisId="left" tick={chartAxisStyle} stroke={chartGridStyle.stroke}
+                label={{ value: "Posts", angle: -90, position: "insideLeft", style: { fontSize: 11, fill: CHART_COLORS.secondary } }} />
+              <YAxis yAxisId="right" orientation="right" tick={chartAxisStyle} stroke={chartGridStyle.stroke} unit="%"
+                label={{ value: "Engagement", angle: 90, position: "insideRight", style: { fontSize: 11, fill: CHART_COLORS.secondary } }} />
+              <Tooltip contentStyle={chartTooltipStyle.contentStyle}
                 formatter={(value: number | undefined, name?: string) => {
                   const v = value ?? 0;
                   if (name === "engagementPct") return [`${v}%`, "Avg Engagement"];
                   if (name === "post_count") return [v, "Posts"];
                   return [v, name ?? ""];
-                }}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: 12 }}
+                }} />
+              <Legend wrapperStyle={{ fontSize: 12 }}
                 formatter={(value: string) => {
                   if (value === "post_count") return "Posts";
                   if (value === "engagementPct") return "Avg Engagement";
                   return value;
-                }}
-              />
-              <Bar
-                yAxisId="left"
-                dataKey="post_count"
-                fill="url(#barGrad)"
-                radius={[4, 4, 0, 0]}
-                barSize={32}
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="engagementPct"
-                stroke={CHART_COLORS.warning}
-                strokeWidth={2}
-                dot={{ r: 4, fill: CHART_COLORS.warning }}
-                activeDot={{ r: 6 }}
-              />
+                }} />
+              <Bar yAxisId="left" dataKey="post_count" fill="url(#barGrad)" radius={[4, 4, 0, 0]} barSize={32} />
+              <Line yAxisId="right" type="monotone" dataKey="engagementPct" stroke={CHART_COLORS.warning} strokeWidth={2}
+                dot={{ r: 4, fill: CHART_COLORS.warning }} activeDot={{ r: 6 }} />
             </ComposedChart>
           </ResponsiveContainer>
         ) : (
@@ -265,9 +289,8 @@ const AnalyticsPage = memo(function AnalyticsPage() {
         )}
       </div>
 
-      {/* ── Row: Pillar + Post Type ──────────────────────────── */}
+      {/* Pillar + Post Type */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 3. Pillar Performance */}
         <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
           <h2 className="text-sm font-semibold text-stone-900 mb-4 flex items-center gap-2">
             <FileText className="w-4 h-4 text-stone-400" />
@@ -277,24 +300,12 @@ const AnalyticsPage = memo(function AnalyticsPage() {
             <ResponsiveContainer width="100%" height={Math.max(200, pillarData.length * 48)}>
               <BarChart data={pillarData} layout="vertical" margin={{ left: 20 }}>
                 <CartesianGrid {...chartGridStyle} horizontal={false} />
-                <XAxis
-                  type="number"
-                  tick={chartAxisStyle}
-                  stroke={chartGridStyle.stroke}
-                  tickFormatter={(v) => `${(v * 100).toFixed(1)}%`}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={chartAxisStyle}
-                  stroke={chartGridStyle.stroke}
-                  width={100}
-                />
-                <Tooltip
-                  contentStyle={chartTooltipStyle.contentStyle}
+                <XAxis type="number" tick={chartAxisStyle} stroke={chartGridStyle.stroke}
+                  tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} />
+                <YAxis type="category" dataKey="name" tick={chartAxisStyle} stroke={chartGridStyle.stroke} width={100} />
+                <Tooltip contentStyle={chartTooltipStyle.contentStyle}
                   formatter={(value: number | undefined) => [pct(value ?? 0), "Avg Engagement"]}
-                  labelFormatter={(label: React.ReactNode) => label}
-                />
+                  labelFormatter={(label: React.ReactNode) => label} />
                 <Bar dataKey="avg_engagement" radius={[0, 4, 4, 0]} barSize={24}>
                   {pillarData.map((p) => (
                     <Cell key={p.id} fill={p.color} />
@@ -308,14 +319,8 @@ const AnalyticsPage = memo(function AnalyticsPage() {
           {pillarData.length > 0 && (
             <div className="mt-3 grid grid-cols-2 gap-2">
               {pillarData.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex items-center gap-2 text-xs text-stone-600 bg-stone-50 rounded-lg px-3 py-2"
-                >
-                  <div
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: p.color }}
-                  />
+                <div key={p.id} className="flex items-center gap-2 text-xs text-stone-600 bg-stone-50 rounded-lg px-3 py-2">
+                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
                   <span className="truncate font-medium">{p.name}</span>
                   <span className="ml-auto text-stone-400">{p.post_count} posts</span>
                 </div>
@@ -324,7 +329,6 @@ const AnalyticsPage = memo(function AnalyticsPage() {
           )}
         </div>
 
-        {/* 4. Post Type Performance */}
         <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
           <h2 className="text-sm font-semibold text-stone-900 mb-4 flex items-center gap-2">
             <Type className="w-4 h-4 text-stone-400" />
@@ -335,66 +339,36 @@ const AnalyticsPage = memo(function AnalyticsPage() {
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={typeData} margin={{ bottom: 5 }}>
                   <CartesianGrid {...chartGridStyle} />
-                  <XAxis
-                    dataKey="label"
-                    tick={chartAxisStyle}
-                    stroke={chartGridStyle.stroke}
-                  />
-                  <YAxis
-                    yAxisId="left"
-                    tick={chartAxisStyle}
-                    stroke={chartGridStyle.stroke}
-                    unit="%"
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={chartAxisStyle}
-                    stroke={chartGridStyle.stroke}
-                    tickFormatter={(v) => formatNumber(v)}
-                  />
-                  <Tooltip
-                    contentStyle={chartTooltipStyle.contentStyle}
+                  <XAxis dataKey="label" tick={chartAxisStyle} stroke={chartGridStyle.stroke} />
+                  <YAxis yAxisId="left" tick={chartAxisStyle} stroke={chartGridStyle.stroke} unit="%" />
+                  <YAxis yAxisId="right" orientation="right" tick={chartAxisStyle} stroke={chartGridStyle.stroke}
+                    tickFormatter={(v) => formatNumber(v)} />
+                  <Tooltip contentStyle={chartTooltipStyle.contentStyle}
                     formatter={(value: number | undefined, name?: string) => {
                       const v = value ?? 0;
                       if (name === "engagementPct") return [`${v}%`, "Avg Engagement"];
                       if (name === "avg_impressions") return [formatNumber(v), "Avg Impressions"];
                       return [v, name ?? ""];
-                    }}
-                  />
-                  <Legend
-                    wrapperStyle={{ fontSize: 12 }}
+                    }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }}
                     formatter={(value: string) => {
                       if (value === "engagementPct") return "Avg Engagement";
                       if (value === "avg_impressions") return "Avg Impressions";
                       return value;
-                    }}
-                  />
+                    }} />
                   <Bar yAxisId="left" dataKey="engagementPct" radius={[4, 4, 0, 0]} barSize={24}>
                     {typeData.map((t) => (
                       <Cell key={t.post_type} fill={TYPE_COLORS[t.post_type] || CHART_COLORS.primary} />
                     ))}
                   </Bar>
-                  <Bar
-                    yAxisId="right"
-                    dataKey="avg_impressions"
-                    fill={CHART_COLORS.secondary}
-                    radius={[4, 4, 0, 0]}
-                    barSize={24}
-                  />
+                  <Bar yAxisId="right" dataKey="avg_impressions" fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} barSize={24} />
                 </BarChart>
               </ResponsiveContainer>
               <div className="mt-3 flex flex-wrap gap-2">
                 {typeData.map((t) => (
-                  <Badge
-                    key={t.post_type}
-                    variant="secondary"
-                    className="inline-flex items-center gap-1.5 text-xs text-stone-600 bg-stone-50 rounded-lg px-3 py-1.5 border border-stone-200/60 font-normal"
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: TYPE_COLORS[t.post_type] || CHART_COLORS.primary }}
-                    />
+                  <Badge key={t.post_type} variant="secondary"
+                    className="inline-flex items-center gap-1.5 text-xs text-stone-600 bg-stone-50 rounded-lg px-3 py-1.5 border border-stone-200/60 font-normal">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: TYPE_COLORS[t.post_type] || CHART_COLORS.primary }} />
                     {t.label}
                     <span className="text-stone-400 ml-1">{t.count} posts</span>
                   </Badge>
@@ -407,9 +381,8 @@ const AnalyticsPage = memo(function AnalyticsPage() {
         </div>
       </div>
 
-      {/* ── Row: Hook Style + Content Length ──────────────────── */}
+      {/* Hook Style + Content Length */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 5. Hook Style Analysis */}
         <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
           <h2 className="text-sm font-semibold text-stone-900 mb-4 flex items-center gap-2">
             <Anchor className="w-4 h-4 text-stone-400" />
@@ -430,33 +403,18 @@ const AnalyticsPage = memo(function AnalyticsPage() {
                   const maxPct = arr[0].engagementPct || 1;
                   return (
                     <div key={h.style} className="flex items-center gap-3">
-                      <span className="text-xs font-semibold text-stone-400 w-5 shrink-0 text-right">
-                        #{i + 1}
-                      </span>
+                      <span className="text-xs font-semibold text-stone-400 w-5 shrink-0 text-right">#{i + 1}</span>
                       <div className="flex items-center gap-1.5 w-24 shrink-0">
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: HOOK_STYLE_COLORS[h.style] || CHART_COLORS.primary }}
-                        />
-                        <span className="text-xs font-medium text-stone-700 capitalize truncate">
-                          {h.style}
-                        </span>
+                        <span className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: HOOK_STYLE_COLORS[h.style] || CHART_COLORS.primary }} />
+                        <span className="text-xs font-medium text-stone-700 capitalize truncate">{h.style}</span>
                       </div>
                       <div className="flex-1 bg-stone-100 rounded-full h-2">
-                        <div
-                          className="h-2 rounded-full transition-all"
-                          style={{
-                            width: `${(h.engagementPct / maxPct) * 100}%`,
-                            backgroundColor: HOOK_STYLE_COLORS[h.style] || CHART_COLORS.primary,
-                          }}
-                        />
+                        <div className="h-2 rounded-full transition-all"
+                          style={{ width: `${(h.engagementPct / maxPct) * 100}%`, backgroundColor: HOOK_STYLE_COLORS[h.style] || CHART_COLORS.primary }} />
                       </div>
-                      <span className="text-xs font-semibold text-stone-600 w-12 text-right shrink-0">
-                        {h.engagementPct}%
-                      </span>
-                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md bg-stone-100 text-stone-500 shrink-0">
-                        {h.count}×
-                      </span>
+                      <span className="text-xs font-semibold text-stone-600 w-12 text-right shrink-0">{h.engagementPct}%</span>
+                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md bg-stone-100 text-stone-500 shrink-0">{h.count}×</span>
                     </div>
                   );
                 })}
@@ -466,7 +424,6 @@ const AnalyticsPage = memo(function AnalyticsPage() {
           )}
         </div>
 
-        {/* 6. Content Length Sweet Spot */}
         <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
           <h2 className="text-sm font-semibold text-stone-900 mb-4 flex items-center gap-2">
             <Lightbulb className="w-4 h-4 text-stone-400" />
@@ -477,52 +434,22 @@ const AnalyticsPage = memo(function AnalyticsPage() {
               <ResponsiveContainer width="100%" height={280}>
                 <ScatterChart margin={{ bottom: 5 }}>
                   <CartesianGrid {...chartGridStyle} />
-                  <XAxis
-                    type="number"
-                    dataKey="word_count"
-                    name="Word Count"
-                    tick={chartAxisStyle}
-                    stroke={chartGridStyle.stroke}
-                    label={{
-                      value: "Word Count",
-                      position: "insideBottom",
-                      offset: -2,
-                      style: { fontSize: 11, fill: CHART_COLORS.secondary },
-                    }}
-                  />
-                  <YAxis
-                    type="number"
-                    dataKey="engagementPct"
-                    name="Engagement"
-                    tick={chartAxisStyle}
-                    stroke={chartGridStyle.stroke}
-                    unit="%"
-                    label={{
-                      value: "Engagement",
-                      angle: -90,
-                      position: "insideLeft",
-                      style: { fontSize: 11, fill: CHART_COLORS.secondary },
-                    }}
-                  />
-                  <Tooltip
-                    contentStyle={chartTooltipStyle.contentStyle}
+                  <XAxis type="number" dataKey="word_count" name="Word Count" tick={chartAxisStyle} stroke={chartGridStyle.stroke}
+                    label={{ value: "Word Count", position: "insideBottom", offset: -2, style: { fontSize: 11, fill: CHART_COLORS.secondary } }} />
+                  <YAxis type="number" dataKey="engagementPct" name="Engagement" tick={chartAxisStyle} stroke={chartGridStyle.stroke} unit="%"
+                    label={{ value: "Engagement", angle: -90, position: "insideLeft", style: { fontSize: 11, fill: CHART_COLORS.secondary } }} />
+                  <Tooltip contentStyle={chartTooltipStyle.contentStyle}
                     formatter={(value: number | undefined, name?: string) => {
                       const v = value ?? 0;
                       if (name === "Engagement") return [`${v}`, name];
                       if (name === "Word Count") return [v, name];
                       return [v, name ?? ""];
                     }}
-                    cursor={{ strokeDasharray: "3 3" }}
-                  />
+                    cursor={{ strokeDasharray: "3 3" }} />
                   <Scatter name="Posts" data={wordData} fill={CHART_COLORS.primary}>
                     {wordData.map((_, index) => (
-                      <Cell
-                        key={index}
-                        fill={CHART_COLORS.primary}
-                        fillOpacity={0.6}
-                        stroke={CHART_COLORS.accent}
-                        strokeWidth={1}
-                      />
+                      <Cell key={index} fill={CHART_COLORS.primary} fillOpacity={0.6}
+                        stroke={CHART_COLORS.accent} strokeWidth={1} />
                     ))}
                   </Scatter>
                 </ScatterChart>
@@ -537,9 +464,8 @@ const AnalyticsPage = memo(function AnalyticsPage() {
         </div>
       </div>
 
-      {/* ── Row: Top Performers + Underperformers ────────────── */}
+      {/* Top Performers + Underperformers */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 7. Top Performers */}
         <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
           <h2 className="text-sm font-semibold text-stone-900 mb-4 flex items-center gap-2">
             <ThumbsUp className="w-4 h-4 text-green-500" />
@@ -556,7 +482,6 @@ const AnalyticsPage = memo(function AnalyticsPage() {
           )}
         </div>
 
-        {/* 8. Underperformers */}
         <div className="bg-white rounded-2xl border border-stone-200/60 p-5">
           <h2 className="text-sm font-semibold text-stone-900 mb-4 flex items-center gap-2">
             <ThumbsDown className="w-4 h-4 text-amber-500" />
@@ -575,10 +500,43 @@ const AnalyticsPage = memo(function AnalyticsPage() {
       </div>
     </div>
   );
-});
+}
 
-AnalyticsPage.displayName = "AnalyticsPage";
-export default AnalyticsPage;
+/* ── Strategy Tab ─────────────────────────────────────────────── */
+
+function StrategyTab() {
+  return (
+    <div className="space-y-6">
+      <StrategyReviewCard />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <PlaybookView />
+        <SectionCard title="Goals" icon={Target}>
+          <GoalTracker />
+        </SectionCard>
+      </div>
+    </div>
+  );
+}
+
+/* ── System Tab ───────────────────────────────────────────────── */
+
+function SystemTab({ heatmap }: { heatmap: HeatmapEntry[] }) {
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Best Time to Post" icon={BarChart3}>
+        {heatmap.length > 0 ? (
+          <HeatmapGrid data={heatmap} />
+        ) : (
+          <EmptyState message="Post at different times to discover your best slots" />
+        )}
+      </SectionCard>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TokenUsageWidget />
+      </div>
+    </div>
+  );
+}
 
 /* ── Sub-components ───────────────────────────────────────────── */
 

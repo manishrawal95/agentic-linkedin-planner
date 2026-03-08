@@ -30,7 +30,7 @@ export default function LinkedInLoading() {
 
       {/* Main content skeleton */}
       <main className="flex-1 p-4 lg:p-8 overflow-auto">
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="max-w-5xl mx-auto space-y-6">
           {/* Page title */}
           <div>
             <div className="h-7 w-48 rounded-xl skeleton mb-2" />

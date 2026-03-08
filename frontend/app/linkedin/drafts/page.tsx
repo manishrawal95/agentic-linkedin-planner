@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useBackgroundTask } from "@/hooks/use-background-task";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { Draft, Pillar } from "@/types/linkedin";
 
 const DraftsPage = memo(function DraftsPage() {
@@ -229,9 +231,6 @@ const DraftsPage = memo(function DraftsPage() {
     fetchDrafts();
   };
 
-  const selectClass =
-    "w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 focus:border-transparent transition-colors";
-
   const statusCounts = {
     active: drafts.filter((d) => d.status === "draft" || d.status === "revised").length,
     scheduled: drafts.filter((d) => d.status === "scheduled").length,
@@ -246,7 +245,7 @@ const DraftsPage = memo(function DraftsPage() {
       : drafts;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 px-1 sm:px-0">
+    <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6 px-1 sm:px-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-semibold text-stone-900 tracking-tight">Draft Workshop</h1>
@@ -337,20 +336,17 @@ const DraftsPage = memo(function DraftsPage() {
               <label className="block text-sm font-medium text-stone-700 mb-1">
                 Pillar
               </label>
-              <select
-                value={manualForm.pillar_id}
-                onChange={(e) =>
-                  setManualForm({ ...manualForm, pillar_id: e.target.value })
-                }
-                className={selectClass}
-              >
-                <option value="">Any</option>
-                {pillars.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={manualForm.pillar_id || "__any__"} onValueChange={(v) => setManualForm({ ...manualForm, pillar_id: v === "__any__" ? "" : v })}>
+                <SelectTrigger className="rounded-xl border-stone-200 h-11 sm:h-9 text-base sm:text-sm">
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__any__">Any</SelectItem>
+                  {pillars.map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div>
@@ -423,20 +419,17 @@ const DraftsPage = memo(function DraftsPage() {
               <label className="block text-sm font-medium text-stone-700 mb-1">
                 Pillar
               </label>
-              <select
-                value={genForm.pillar_id}
-                onChange={(e) =>
-                  setGenForm({ ...genForm, pillar_id: e.target.value })
-                }
-                className={selectClass}
-              >
-                <option value="">Any</option>
-                {pillars.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={genForm.pillar_id || "__any__"} onValueChange={(v) => setGenForm({ ...genForm, pillar_id: v === "__any__" ? "" : v })}>
+                <SelectTrigger className="rounded-xl border-stone-200 h-11 sm:h-9 text-base sm:text-sm">
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__any__">Any</SelectItem>
+                  {pillars.map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1">
@@ -456,22 +449,16 @@ const DraftsPage = memo(function DraftsPage() {
               <label className="block text-sm font-medium text-stone-700 mb-1">
                 Variants
               </label>
-              <select
-                value={genForm.num_variants}
-                onChange={(e) =>
-                  setGenForm({
-                    ...genForm,
-                    num_variants: Number(e.target.value),
-                  })
-                }
-                className={selectClass}
-              >
-                {[1, 2, 3].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+              <Select value={String(genForm.num_variants)} onValueChange={(v) => setGenForm({ ...genForm, num_variants: Number(v) })}>
+                <SelectTrigger className="rounded-xl border-stone-200 h-11 sm:h-9 text-base sm:text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3].map((n) => (
+                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="flex gap-3">
@@ -506,41 +493,39 @@ const DraftsPage = memo(function DraftsPage() {
       {/* Draft list */}
       <div className="space-y-4">
         {displayedDrafts.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-stone-200/60">
-            <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <PenTool className="w-7 h-7 text-stone-400" />
-            </div>
-            <p className="text-base font-semibold text-stone-800">
-              {filterStatus === "active" ? "No active drafts" : filterStatus === "posted" ? "No posted drafts" : "No drafts"}
-            </p>
-            <p className="text-sm text-stone-400 mt-1 max-w-xs mx-auto">
-              {filterStatus === "active"
-                ? "Drop a topic idea and let AI write your next LinkedIn post"
-                : filterStatus === "posted"
-                  ? "Posts you've published from drafts will appear here"
-                  : "Generate drafts with AI or create them manually"}
-            </p>
-            {filterStatus === "active" && (
-              <Button
-                onClick={() => setShowGenerate(true)}
-                className="mt-5 rounded-xl active:scale-[0.98] transition-all"
-              >
-                <PenTool className="w-4 h-4" />
-                Generate with AI
-              </Button>
-            )}
+          <div className="bg-white rounded-2xl border border-stone-200/60">
+            <EmptyState
+              icon={PenTool}
+              title={filterStatus === "active" ? "No active drafts" : filterStatus === "posted" ? "No posted drafts" : "No drafts"}
+              description={
+                filterStatus === "active"
+                  ? "Drop a topic idea and let AI write your next LinkedIn post"
+                  : filterStatus === "posted"
+                    ? "Posts you've published from drafts will appear here"
+                    : "Generate drafts with AI or create them manually"
+              }
+              action={
+                filterStatus === "active"
+                  ? { label: "Generate with AI", onClick: () => setShowGenerate(true) }
+                  : undefined
+              }
+            />
           </div>
         ) : (
-          displayedDrafts.map((draft) => (
+          (() => {
+            const pillarMap = Object.fromEntries(pillars.map((p) => [p.id, p]));
+            return displayedDrafts.map((draft) => (
             <DraftEditor
               key={draft.id}
               draft={draft}
+              pillar={draft.pillar_id ? pillarMap[draft.pillar_id] : null}
               onUpdate={handleUpdate}
               onDelete={handleDiscard}
               onSchedule={handleAutoSchedule}
               onPublish={openPublishModal}
             />
-          ))
+          ));
+          })()
         )}
       </div>
 
@@ -632,21 +617,20 @@ const DraftsPage = memo(function DraftsPage() {
               <label className="block text-sm font-medium text-stone-700 mb-1">
                 Post Type
               </label>
-              <select
-                value={publishForm.post_type}
-                onChange={(e) =>
-                  setPublishForm({ ...publishForm, post_type: e.target.value })
-                }
-                className={selectClass}
-              >
-                <option value="text">Text</option>
-                <option value="carousel">Carousel</option>
-                <option value="personal image">Personal Image</option>
-                <option value="social proof image">Social Proof Image</option>
-                <option value="poll">Poll</option>
-                <option value="video">Video</option>
-                <option value="article">Article</option>
-              </select>
+              <Select value={publishForm.post_type} onValueChange={(v) => setPublishForm({ ...publishForm, post_type: v })}>
+                <SelectTrigger className="rounded-xl border-stone-200 h-11 sm:h-9 text-base sm:text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="carousel">Carousel</SelectItem>
+                  <SelectItem value="personal image">Personal Image</SelectItem>
+                  <SelectItem value="social proof image">Social Proof Image</SelectItem>
+                  <SelectItem value="poll">Poll</SelectItem>
+                  <SelectItem value="video">Video</SelectItem>
+                  <SelectItem value="article">Article</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1">

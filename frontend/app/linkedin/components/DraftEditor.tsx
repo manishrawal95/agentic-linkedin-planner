@@ -16,6 +16,8 @@ import {
   Lightbulb,
   X,
   ImagePlus,
+  MoreHorizontal,
+  Clock,
 } from "lucide-react";
 import LinkedInPreview from "./LinkedInPreview";
 import { Button } from "@/components/ui/button";
@@ -28,10 +30,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Draft } from "@/types/linkedin";
+import DraftAmbientIndicators from "./DraftAmbientIndicators";
+import type { Draft, Pillar } from "@/types/linkedin";
 
 interface DraftEditorProps {
   draft: Draft;
+  pillar?: Pillar | null;
   onUpdate: (id: number, data: Record<string, unknown>) => Promise<void>;
   onDelete: (id: number) => void;
   onSchedule?: (draft: Draft) => Promise<void>;
@@ -39,6 +43,28 @@ interface DraftEditorProps {
 }
 
 const LINKEDIN_CHAR_LIMIT = 3000;
+
+function relativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+const STATUS_BG: Record<string, string> = {
+  draft: "bg-white",
+  revised: "bg-blue-50/30",
+  scheduled: "bg-indigo-50/30",
+  posted: "bg-emerald-50/30",
+  discarded: "bg-stone-50",
+};
 
 const IMPROVE_ACTIONS = [
   { key: "punch-hook", label: "Punch the hook" },
@@ -52,6 +78,7 @@ type ImproveAction = typeof IMPROVE_ACTIONS[number]["key"];
 
 const DraftEditor = memo(function DraftEditor({
   draft,
+  pillar,
   onUpdate,
   onDelete,
   onSchedule,
@@ -222,81 +249,144 @@ const DraftEditor = memo(function DraftEditor({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-stone-200/60 overflow-hidden hover:shadow-[var(--shadow-card-hover)] transition-all duration-200">
+    <div className={`rounded-2xl border border-stone-200/60 overflow-hidden hover:shadow-[var(--shadow-card-hover)] transition-all duration-200 ${STATUS_BG[draft.status] || "bg-white"}`}>
+      {/* Pillar color bar */}
+      {pillar?.color && (
+        <div className="h-1" style={{ backgroundColor: pillar.color }} />
+      )}
+
       <div className="p-4 sm:p-5">
         {!expanded ? (
           /* ── Collapsed ── */
           <>
+            {/* Zone 1: Topic heading + meta */}
             <button
               type="button"
               onClick={() => setExpanded(true)}
-              className="w-full text-left"
+              className="w-full text-left group"
             >
-              <p className="text-[15px] sm:text-sm text-stone-800 leading-relaxed line-clamp-2">
-                {content}
-              </p>
-              <span className="text-xs text-stone-400 mt-0.5 inline-block">
-                view more
-              </span>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-stone-900 line-clamp-1">
+                    {draft.topic}
+                  </h3>
+                  <p className="text-[13px] sm:text-xs text-stone-500 leading-relaxed line-clamp-2 mt-1">
+                    {content}
+                  </p>
+                </div>
+              </div>
             </button>
 
-            <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+            {/* Zone 2: Status + meta + overflow actions */}
+            <div className="flex items-center gap-2 mt-3">
               <Badge
                 variant="secondary"
                 className={`${statusColors[draft.status] || "bg-stone-100 text-stone-600"} hover:bg-transparent text-[11px]`}
               >
                 {draft.status}
               </Badge>
-              {draft.status === "draft" && (
-                <button
-                  onClick={() => onUpdate(draft.id, { status: "revised" })}
-                  className="text-[11px] text-stone-600 hover:text-stone-900 font-medium flex items-center gap-0.5 transition-colors"
+              {pillar && (
+                <Badge
+                  variant="secondary"
+                  className="text-[11px] font-medium"
+                  style={{
+                    backgroundColor: `${pillar.color}15`,
+                    color: pillar.color,
+                  }}
                 >
-                  <ArrowRight className="w-3 h-3" />
-                  Revised
-                </button>
+                  {pillar.name}
+                </Badge>
               )}
-              {(draft.status === "draft" || draft.status === "revised") && onPublish && (
-                <button
-                  onClick={() => onPublish(draft)}
-                  className="text-[11px] text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-0.5 transition-colors"
-                >
-                  <Send className="w-3 h-3" />
-                  Posted
-                </button>
-              )}
-              <div className="flex gap-1 ml-auto shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleCopy}
-                  className="h-8 w-8 rounded-xl text-stone-400 hover:text-stone-700"
-                  title="Copy"
-                >
-                  {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onDelete(draft.id)}
-                  className="h-8 w-8 rounded-xl text-stone-400 hover:text-red-600 hover:bg-red-50"
-                  title="Discard"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
+              <span className="flex items-center gap-1 text-[11px] text-stone-400 ml-auto">
+                <Clock className="w-3 h-3" />
+                {relativeTime(draft.created_at)}
+              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-lg text-stone-400 hover:text-stone-700 shrink-0"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="rounded-xl">
+                  <DropdownMenuItem onClick={handleCopy} className="text-xs rounded-lg gap-2">
+                    <Copy className="w-3.5 h-3.5" />
+                    Copy content
+                  </DropdownMenuItem>
+                  {draft.status === "draft" && (
+                    <DropdownMenuItem onClick={() => onUpdate(draft.id, { status: "revised" })} className="text-xs rounded-lg gap-2">
+                      <ArrowRight className="w-3.5 h-3.5" />
+                      Mark as revised
+                    </DropdownMenuItem>
+                  )}
+                  {(draft.status === "draft" || draft.status === "revised") && onPublish && (
+                    <DropdownMenuItem onClick={() => onPublish(draft)} className="text-xs rounded-lg gap-2">
+                      <Send className="w-3.5 h-3.5" />
+                      Mark as posted
+                    </DropdownMenuItem>
+                  )}
+                  {onSchedule && draft.status !== "posted" && draft.status !== "discarded" && draft.status !== "scheduled" && (
+                    <DropdownMenuItem onClick={() => { onSchedule(draft); }} className="text-xs rounded-lg gap-2">
+                      <CalendarPlus className="w-3.5 h-3.5" />
+                      Auto-schedule
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => onDelete(draft.id)} className="text-xs rounded-lg gap-2 text-red-600 focus:text-red-600">
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Discard
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </>
         ) : (
           /* ── Expanded ── */
           <>
-            {/* Idea context — subtle, one-line */}
-            <p className="text-[11px] text-stone-400 truncate mb-2 flex items-center gap-1">
-              <Lightbulb className="w-3 h-3 shrink-0" />
-              {draft.topic}
-            </p>
+            {/* Zone 1: Topic heading + status + pillar */}
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 text-[11px] text-stone-400 mb-1">
+                  <Lightbulb className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{draft.topic}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge
+                    variant="secondary"
+                    className={`${statusColors[draft.status] || "bg-stone-100 text-stone-600"} hover:bg-transparent text-[11px]`}
+                  >
+                    {draft.status}
+                  </Badge>
+                  {pillar && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[11px] font-medium"
+                      style={{
+                        backgroundColor: `${pillar.color}15`,
+                        color: pillar.color,
+                      }}
+                    >
+                      {pillar.name}
+                    </Badge>
+                  )}
+                  <span className="flex items-center gap-1 text-[11px] text-stone-400">
+                    <Clock className="w-3 h-3" />
+                    {relativeTime(draft.created_at)}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 hover:text-stone-600 transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-            {/* Editor */}
+            {/* Zone 2: Editor / Preview */}
             {showPreview ? (
               <LinkedInPreview
                 authorName="You"
@@ -314,11 +404,11 @@ const DraftEditor = memo(function DraftEditor({
               />
             )}
 
-            {/* AI Suggestion */}
+            {/* AI Suggestion — highlighted panel */}
             {suggestion && (
-              <div className="mt-3 border border-stone-200 rounded-2xl overflow-hidden">
-                <div className="flex items-center justify-between px-3 py-2 bg-stone-50 border-b border-stone-200">
-                  <span className="text-xs font-semibold text-stone-700 flex items-center gap-1.5">
+              <div className="mt-3 border border-amber-200 rounded-2xl overflow-hidden bg-amber-50/30">
+                <div className="flex items-center justify-between px-3 py-2 bg-amber-50 border-b border-amber-200/60">
+                  <span className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
                     <MessageSquareDashed className="w-3.5 h-3.5" />
                     AI Suggestion
                   </span>
@@ -331,13 +421,13 @@ const DraftEditor = memo(function DraftEditor({
                     <X className="w-3.5 h-3.5" />
                   </Button>
                 </div>
-                <div className="p-3 bg-white">
+                <div className="p-3">
                   <p className="text-sm text-stone-700 whitespace-pre-wrap leading-relaxed">{suggestion}</p>
                   <div className="flex gap-2 mt-3">
-                    <Button size="sm" onClick={handleAcceptSuggestion} className="rounded-xl text-xs h-9">
+                    <Button size="sm" onClick={handleAcceptSuggestion} className="rounded-xl text-xs h-8">
                       Accept
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setSuggestion(null)} className="rounded-xl text-xs h-9 border-stone-200">
+                    <Button size="sm" variant="outline" onClick={() => setSuggestion(null)} className="rounded-xl text-xs h-8 border-stone-200">
                       Dismiss
                     </Button>
                   </div>
@@ -345,19 +435,23 @@ const DraftEditor = memo(function DraftEditor({
               </div>
             )}
 
-            {/* Char counter */}
-            <div className="flex items-center gap-4 mt-2.5">
-              <span className="text-xs text-stone-400">{wordCount} words</span>
-              <div className="flex items-center gap-2">
-                <Progress value={charPct} className="w-20 sm:w-24 h-1.5 bg-stone-100" />
-                <span className={`text-xs font-medium ${isOverLimit ? "text-red-600" : charPct > 80 ? "text-amber-600" : "text-stone-400"}`}>
+            {/* Zone 3: Char counter + word count — compact row */}
+            <div className="flex items-center gap-4 mt-3 py-2 border-t border-stone-100">
+              <span className="text-[11px] text-stone-400">{wordCount} words</span>
+              <div className="flex items-center gap-2 flex-1">
+                <Progress value={charPct} className="w-20 sm:w-28 h-1.5 bg-stone-100" />
+                <span className={`text-[11px] font-medium ${isOverLimit ? "text-red-600" : charPct > 80 ? "text-amber-600" : "text-stone-400"}`}>
                   {charCount}/{LINKEDIN_CHAR_LIMIT}
                 </span>
               </div>
             </div>
 
-            {/* Action icons row */}
-            <div className="flex items-center gap-1 mt-3 flex-wrap">
+            {/* Ambient draft indicators */}
+            <DraftAmbientIndicators draft={draft} wordCount={wordCount} />
+
+            {/* Zone 4: Action toolbar — grouped by purpose */}
+            <div className="flex items-center gap-1 mt-2">
+              {/* Primary: Improve */}
               {draft.status !== "posted" && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -365,10 +459,10 @@ const DraftEditor = memo(function DraftEditor({
                       variant="outline"
                       size="sm"
                       disabled={improving}
-                      className="gap-1 rounded-xl border-stone-200 text-stone-600 hover:bg-stone-50 h-9 text-xs"
+                      className="gap-1.5 rounded-xl border-stone-200 text-stone-700 hover:bg-stone-50 h-8 text-xs font-medium"
                     >
                       <Wand2 className="w-3.5 h-3.5" />
-                      {improving ? "..." : "Improve"}
+                      {improving ? "Improving..." : "Improve"}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="rounded-xl">
@@ -384,73 +478,76 @@ const DraftEditor = memo(function DraftEditor({
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowPreview(!showPreview)}
-                className="h-9 w-9 rounded-xl text-stone-400 hover:text-stone-700"
-                title={showPreview ? "Hide preview" : "LinkedIn preview"}
-              >
-                {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleCopy}
-                className="h-9 w-9 rounded-xl text-stone-400 hover:text-stone-700"
-                title="Copy"
-              >
-                {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-              </Button>
-              {onSchedule && draft.status !== "posted" && draft.status !== "discarded" && draft.status !== "scheduled" && (
+
+              {/* Save — only when changes exist */}
+              {hasChanges && (
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="rounded-xl text-xs h-8 active:scale-[0.98] transition-all"
+                >
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+              )}
+
+              {/* Secondary: icon group */}
+              <div className="flex items-center gap-0.5 ml-1">
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={async () => {
-                    setScheduling(true);
-                    try {
-                      await onSchedule(draft);
-                    } finally {
-                      setScheduling(false);
-                    }
-                  }}
-                  disabled={scheduling}
-                  className="h-9 w-9 rounded-xl text-stone-400 hover:text-stone-700"
-                  title="Auto-schedule"
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="h-8 w-8 rounded-lg text-stone-400 hover:text-stone-700"
+                  title={showPreview ? "Hide preview" : "LinkedIn preview"}
                 >
-                  {scheduling ? (
-                    <div className="w-4 h-4 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
-                  ) : (
-                    <CalendarPlus className="w-4 h-4" />
-                  )}
+                  {showPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </Button>
-              )}
-              {draft.status !== "posted" && linkedInConnected && !imagePreview && (
-                <label className="inline-flex items-center justify-center h-9 w-9 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-pointer transition-colors" title="Add image">
-                  <ImagePlus className="w-4 h-4" />
-                  <input type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
-                </label>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onDelete(draft.id)}
-                className="h-9 w-9 rounded-xl text-stone-400 hover:text-red-600 hover:bg-red-50"
-                title="Discard"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-              <div className="flex items-center gap-2 flex-wrap ml-auto">
-                <Badge
-                  variant="secondary"
-                  className={`${statusColors[draft.status] || "bg-stone-100 text-stone-600"} hover:bg-transparent text-[11px]`}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleCopy}
+                  className="h-8 w-8 rounded-lg text-stone-400 hover:text-stone-700"
+                  title="Copy"
                 >
-                  {draft.status}
-                </Badge>
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </Button>
+                {onSchedule && draft.status !== "posted" && draft.status !== "discarded" && draft.status !== "scheduled" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={async () => {
+                      setScheduling(true);
+                      try {
+                        await onSchedule(draft);
+                      } finally {
+                        setScheduling(false);
+                      }
+                    }}
+                    disabled={scheduling}
+                    className="h-8 w-8 rounded-lg text-stone-400 hover:text-stone-700"
+                    title="Auto-schedule"
+                  >
+                    {scheduling ? (
+                      <div className="w-3.5 h-3.5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                    ) : (
+                      <CalendarPlus className="w-3.5 h-3.5" />
+                    )}
+                  </Button>
+                )}
+                {draft.status !== "posted" && linkedInConnected && !imagePreview && (
+                  <label className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-pointer transition-colors" title="Add image">
+                    <ImagePlus className="w-3.5 h-3.5" />
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+                  </label>
+                )}
+              </div>
+
+              {/* Status transitions + discard — far right */}
+              <div className="flex items-center gap-1 ml-auto">
                 {draft.status === "draft" && (
                   <button
                     onClick={() => onUpdate(draft.id, { status: "revised" })}
-                    className="text-[11px] text-stone-600 hover:text-stone-900 font-medium flex items-center gap-0.5 transition-colors"
+                    className="text-[11px] text-stone-500 hover:text-stone-900 font-medium flex items-center gap-0.5 transition-colors px-1.5 py-1 rounded-lg hover:bg-stone-100"
                   >
                     <ArrowRight className="w-3 h-3" />
                     Revised
@@ -459,12 +556,21 @@ const DraftEditor = memo(function DraftEditor({
                 {(draft.status === "draft" || draft.status === "revised") && onPublish && (
                   <button
                     onClick={() => onPublish(draft)}
-                    className="text-[11px] text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-0.5 transition-colors"
+                    className="text-[11px] text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-0.5 transition-colors px-1.5 py-1 rounded-lg hover:bg-emerald-50"
                   >
                     <Send className="w-3 h-3" />
                     Posted
                   </button>
                 )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onDelete(draft.id)}
+                  className="h-8 w-8 rounded-lg text-stone-400 hover:text-red-600 hover:bg-red-50"
+                  title="Discard"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
               </div>
             </div>
 
@@ -484,61 +590,43 @@ const DraftEditor = memo(function DraftEditor({
               </div>
             )}
 
-            {/* Post to LinkedIn feedback */}
+            {/* Post to LinkedIn — standalone prominent button */}
+            {draft.status !== "posted" && (
+              <div className="mt-3 pt-3 border-t border-stone-100">
+                {linkedInConnected ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePostToLinkedIn}
+                    disabled={posting || isOverLimit || uploadingImage}
+                    className="gap-1.5 rounded-xl text-[#0a66c2] border-[#0a66c2]/30 hover:bg-blue-50 text-xs h-9 w-full sm:w-auto"
+                  >
+                    <Linkedin className="w-4 h-4" />
+                    {posting ? "Posting to LinkedIn..." : "Post to LinkedIn"}
+                  </Button>
+                ) : (
+                  <a
+                    href="/api/linkedin/auth/start"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-[#0a66c2] text-xs font-medium rounded-xl border border-[#0a66c2]/30 hover:bg-blue-50 transition-colors"
+                  >
+                    <Linkedin className="w-4 h-4" />
+                    Connect LinkedIn to post directly
+                  </a>
+                )}
+              </div>
+            )}
+
+            {/* Feedback messages */}
             {postSuccess && (
               <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200/60 rounded-xl text-xs text-emerald-700 font-medium">
                 Posted to LinkedIn
               </div>
             )}
             {postError && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-200/60 rounded-xl text-xs text-red-700">
+              <div className="mt-2 p-3 bg-red-50 border border-red-200/60 rounded-xl text-xs text-red-700">
                 {postError}
               </div>
             )}
-
-            {/* Post / Save */}
-            <div className="flex items-center gap-2 mt-2">
-              {draft.status !== "posted" && (
-                linkedInConnected ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePostToLinkedIn}
-                    disabled={posting || isOverLimit || uploadingImage}
-                    className="gap-1.5 rounded-xl text-[#0a66c2] border-[#0a66c2]/30 hover:bg-blue-50 text-xs h-8"
-                  >
-                    <Linkedin className="w-3.5 h-3.5" />
-                    {posting ? "Posting..." : "Post"}
-                  </Button>
-                ) : (
-                  <a
-                    href="/api/linkedin/auth/start"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[#0a66c2] text-xs font-medium rounded-xl border border-[#0a66c2]/30 hover:bg-blue-50 transition-colors"
-                  >
-                    <Linkedin className="w-3.5 h-3.5" />
-                    Connect
-                  </a>
-                )
-              )}
-              {hasChanges && (
-                <Button
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="rounded-xl text-xs h-8 active:scale-[0.98] transition-all"
-                >
-                  {saving ? "Saving..." : "Save"}
-                </Button>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setExpanded(false)}
-              className="text-xs text-stone-400 hover:text-stone-600 mt-2 transition-colors"
-            >
-              Collapse
-            </button>
           </>
         )}
       </div>

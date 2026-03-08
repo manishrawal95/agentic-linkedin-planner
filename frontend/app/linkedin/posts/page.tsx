@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Plus, Filter, FileText, Search, ArrowUpDown, BarChart3, Upload } from "lucide-react";
+import { Plus, Filter, FileText, Search, ArrowUpDown, BarChart3, Upload, ChevronDown } from "lucide-react";
 import PostForm from "../components/PostForm";
 import PostCard from "../components/PostCard";
 import MetricsForm from "../components/MetricsForm";
@@ -10,10 +10,10 @@ import { useToast } from "../components/Toast";
 import { useBackgroundTask } from "@/hooks/use-background-task";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { Post, Pillar, Metrics } from "@/types/linkedin";
-
-const selectClass =
-  "flex-1 sm:flex-none w-full sm:w-auto border border-stone-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-400 focus:border-transparent transition-colors";
 
 const PostsPage = memo(function PostsPage() {
   const toast = useToast();
@@ -23,6 +23,7 @@ const PostsPage = memo(function PostsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [metricsPostId, setMetricsPostId] = useState<number | null>(null);
+  const [deletePostId, setDeletePostId] = useState<number | null>(null);
   const [metricsPostAuthor, setMetricsPostAuthor] = useState<string>("me");
   const [filterAuthor, setFilterAuthor] = useState<string>("");
   const [filterPillar, setFilterPillar] = useState<string>("");
@@ -32,6 +33,7 @@ const PostsPage = memo(function PostsPage() {
   const [sortBy, setSortBy] = useState<string>("date");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
   const fetchPosts = useCallback(async () => {
     const params = new URLSearchParams();
@@ -224,18 +226,24 @@ const PostsPage = memo(function PostsPage() {
     }
   }, [toast, fetchPosts]);
 
-  const handleDelete = async (postId: number) => {
-    if (!confirm("Delete this post?")) return;
+  const handleDelete = (postId: number) => {
+    setDeletePostId(postId);
+  };
+
+  const confirmDelete = async () => {
+    if (deletePostId === null) return;
     try {
-      const res = await fetch(`/api/linkedin/posts/${postId}`, { method: "DELETE" });
+      const res = await fetch(`/api/linkedin/posts/${deletePostId}`, { method: "DELETE" });
       if (!res.ok) {
         toast.error("Failed to delete post. Please try again.");
         return;
       }
       fetchPosts();
     } catch (err) {
-      console.error("PostsPage.handleDelete: DELETE /api/linkedin/posts/:id failed:", err);
+      console.error("PostsPage.confirmDelete: DELETE /api/linkedin/posts/:id failed:", err);
       toast.error("Failed to delete post. Please try again.");
+    } finally {
+      setDeletePostId(null);
     }
   };
 
@@ -265,7 +273,7 @@ const PostsPage = memo(function PostsPage() {
     });
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">Post Library</h1>
@@ -309,54 +317,102 @@ const PostsPage = memo(function PostsPage() {
 
       {/* Search & Filters */}
       <div className="bg-white rounded-2xl border border-stone-200/60 px-4 py-3 space-y-3">
-        <div className="relative">
-          <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search posts by content, tags, or hook..."
-            className="pl-10 rounded-xl border-stone-200 focus-visible:ring-stone-400"
-          />
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search posts by content, tags, or hook..."
+              className="pl-10 rounded-xl border-stone-200 focus-visible:ring-stone-400"
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowFilters((v) => !v)}
+            className={`gap-1.5 rounded-xl border-stone-200 h-9 shrink-0 ${
+              (filterAuthor || filterPillar || filterType || filterClassification)
+                ? "bg-stone-900 text-white border-stone-900 hover:bg-stone-800 hover:text-white"
+                : ""
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            Filters
+            {(() => {
+              const count = [filterAuthor, filterPillar, filterType, filterClassification].filter(Boolean).length;
+              return count > 0 ? (
+                <span className="bg-white/20 text-[11px] font-semibold rounded-full px-1.5 py-0.5 leading-none">{count}</span>
+              ) : null;
+            })()}
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFilters ? "rotate-180" : ""}`} />
+          </Button>
         </div>
-        <div className="flex gap-3 items-center flex-wrap">
-          <Filter className="w-4 h-4 text-stone-400 shrink-0" />
-          <select value={filterAuthor} onChange={(e) => setFilterAuthor(e.target.value)} className={selectClass}>
-            <option value="">All authors</option>
-            <option value="me">My posts</option>
-            <option value="__others__">Others&apos; posts</option>
-          </select>
-          <select value={filterPillar} onChange={(e) => setFilterPillar(e.target.value)} className={selectClass}>
-            <option value="">All pillars</option>
-            {pillars.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-          </select>
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className={selectClass}>
-            <option value="">All types</option>
-            <option value="text">Text</option>
-            <option value="carousel">Carousel</option>
-            <option value="personal image">Personal Image</option>
-            <option value="social proof image">Social Proof Image</option>
-            <option value="poll">Poll</option>
-            <option value="video">Video</option>
-            <option value="article">Article</option>
-          </select>
-          <select value={filterClassification} onChange={(e) => setFilterClassification(e.target.value)} className={selectClass}>
-            <option value="">All results</option>
-            <option value="hit">Hit</option>
-            <option value="average">Average</option>
-            <option value="miss">Miss</option>
-          </select>
+        {showFilters && (
+        <div className="flex gap-3 items-center flex-wrap pt-1">
+          <Select value={filterAuthor || "__all__"} onValueChange={(v) => setFilterAuthor(v === "__all__" ? "" : v)}>
+            <SelectTrigger className="flex-1 sm:flex-none sm:w-[140px] rounded-xl border-stone-200 h-9 text-sm">
+              <SelectValue placeholder="All authors" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All authors</SelectItem>
+              <SelectItem value="me">My posts</SelectItem>
+              <SelectItem value="__others__">Others&apos; posts</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterPillar || "__all__"} onValueChange={(v) => setFilterPillar(v === "__all__" ? "" : v)}>
+            <SelectTrigger className="flex-1 sm:flex-none sm:w-[140px] rounded-xl border-stone-200 h-9 text-sm">
+              <SelectValue placeholder="All pillars" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All pillars</SelectItem>
+              {pillars.map((p) => (<SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>))}
+            </SelectContent>
+          </Select>
+          <Select value={filterType || "__all__"} onValueChange={(v) => setFilterType(v === "__all__" ? "" : v)}>
+            <SelectTrigger className="flex-1 sm:flex-none sm:w-[140px] rounded-xl border-stone-200 h-9 text-sm">
+              <SelectValue placeholder="All types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All types</SelectItem>
+              <SelectItem value="text">Text</SelectItem>
+              <SelectItem value="carousel">Carousel</SelectItem>
+              <SelectItem value="personal image">Personal Image</SelectItem>
+              <SelectItem value="social proof image">Social Proof Image</SelectItem>
+              <SelectItem value="poll">Poll</SelectItem>
+              <SelectItem value="video">Video</SelectItem>
+              <SelectItem value="article">Article</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterClassification || "__all__"} onValueChange={(v) => setFilterClassification(v === "__all__" ? "" : v)}>
+            <SelectTrigger className="flex-1 sm:flex-none sm:w-[130px] rounded-xl border-stone-200 h-9 text-sm">
+              <SelectValue placeholder="All results" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All results</SelectItem>
+              <SelectItem value="hit">Hit</SelectItem>
+              <SelectItem value="average">Average</SelectItem>
+              <SelectItem value="miss">Miss</SelectItem>
+            </SelectContent>
+          </Select>
           <div className="w-full sm:w-auto sm:ml-auto flex items-center gap-2">
             <ArrowUpDown className="w-4 h-4 text-stone-400 shrink-0" />
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={selectClass}>
-              <option value="date">Sort by Date</option>
-              <option value="engagement">Sort by Engagement</option>
-              <option value="impressions">Sort by Impressions</option>
-              <option value="comments">Sort by Comments</option>
-              <option value="saves">Sort by Saves</option>
-            </select>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-full sm:w-[170px] rounded-xl border-stone-200 h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Sort by Date</SelectItem>
+                <SelectItem value="engagement">Sort by Engagement</SelectItem>
+                <SelectItem value="impressions">Sort by Impressions</SelectItem>
+                <SelectItem value="comments">Sort by Comments</SelectItem>
+                <SelectItem value="saves">Sort by Saves</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
+        )}
       </div>
 
       {showForm && <PostForm pillars={pillars} onSubmit={handleCreatePost} onCancel={() => setShowForm(false)} />}
@@ -364,24 +420,21 @@ const PostsPage = memo(function PostsPage() {
       {/* Post List */}
       <div className="space-y-4">
         {filteredPosts.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-stone-200/60">
-            <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <FileText className="w-7 h-7 text-stone-400" />
-            </div>
-            <p className="text-base font-semibold text-stone-800">
-              {searchQuery || filterType || filterClassification ? "No matching posts" : "No posts yet"}
-            </p>
-            <p className="text-sm text-stone-400 mt-1 max-w-xs mx-auto">
-              {searchQuery || filterType || filterClassification
-                ? "Try adjusting your filters or search query"
-                : "Log your LinkedIn posts to start tracking performance and getting AI insights"}
-            </p>
-            {!searchQuery && !filterType && !filterClassification && (
-              <Button onClick={() => setShowForm(true)} className="mt-5 gap-2 rounded-xl active:scale-[0.98] transition-all">
-                <Plus className="w-4 h-4" />
-                Add Post
-              </Button>
-            )}
+          <div className="bg-white rounded-2xl border border-stone-200/60">
+            <EmptyState
+              icon={FileText}
+              title={searchQuery || filterType || filterClassification ? "No matching posts" : "No posts yet"}
+              description={
+                searchQuery || filterType || filterClassification
+                  ? "Try adjusting your filters or search query"
+                  : "Log your LinkedIn posts to start tracking performance and getting AI insights"
+              }
+              action={
+                !searchQuery && !filterType && !filterClassification
+                  ? { label: "Add Post", onClick: () => setShowForm(true) }
+                  : undefined
+              }
+            />
           </div>
         ) : (
           filteredPosts.map((post) => (
@@ -445,6 +498,18 @@ const PostsPage = memo(function PostsPage() {
           </div>
         </div>
       )}
+      <AlertDialog open={deletePostId !== null} onOpenChange={(open) => !open && setDeletePostId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+            <AlertDialogDescription>This will permanently remove the post and its metrics. This action cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="rounded-xl bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 });

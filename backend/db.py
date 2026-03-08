@@ -389,6 +389,31 @@ def _init_tables(conn: sqlite3.Connection) -> None:
         ) latest ON ms.post_id = latest.post_id AND ms.snapshot_at = latest.max_at
     """)
 
+    # Migrate: create token_usage table for LLM cost tracking
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS token_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL,
+            model TEXT NOT NULL,
+            feature TEXT NOT NULL DEFAULT 'unknown',
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            duration_ms INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_token_usage_feature ON token_usage(feature)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_token_usage_created ON token_usage(created_at)")
+
+    # Migrate: create app_settings table (key-value store for UI-configurable settings)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT '',
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
     conn.commit()
 
     logger.info("All tables initialized")

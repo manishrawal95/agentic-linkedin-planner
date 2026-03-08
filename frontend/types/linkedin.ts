@@ -473,6 +473,22 @@ export interface Idea {
   created_at: string;
 }
 
+// ─── Suggestions ────────────────────────────────────────────────
+
+export interface Suggestion {
+  id: string;
+  type: string;
+  priority: number;
+  icon: string;
+  title: string;
+  description: string;
+  action_url: string;
+  action_label: string;
+  entity_type: string;
+  entity_id: number | null;
+  metadata?: Record<string, unknown>;
+}
+
 // ─── Strategy Review ─────────────────────────────────────────────
 
 export interface StrategyRecommendation {

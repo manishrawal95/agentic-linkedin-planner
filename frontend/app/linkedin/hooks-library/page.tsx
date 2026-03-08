@@ -1,9 +1,10 @@
 "use client";
 
-import { memo, useEffect, useState, useCallback } from "react";
+import { lazy, memo, Suspense, useEffect, useState, useCallback } from "react";
 import { Plus, Trash2, Anchor, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -13,6 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Hook } from "@/types/linkedin";
+
+const HashtagSetsPage = lazy(() => import("../hashtags/page"));
 
 const HOOK_STYLES = [
   "Question",
@@ -24,7 +27,50 @@ const HOOK_STYLES = [
   "Statement",
 ];
 
-const HooksLibraryPage = memo(function HooksLibraryPage() {
+const HooksAndHashtagsPage = memo(function HooksAndHashtagsPage() {
+  const [activeTab, setActiveTab] = useState<"hooks" | "hashtags">("hooks");
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-6">
+      {/* Tab bar */}
+      <div className="flex gap-1 bg-stone-100 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setActiveTab("hooks")}
+          className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === "hooks"
+              ? "bg-white text-stone-900 shadow-sm"
+              : "text-stone-500 hover:text-stone-700"
+          }`}
+        >
+          Hooks
+        </button>
+        <button
+          onClick={() => setActiveTab("hashtags")}
+          className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === "hashtags"
+              ? "bg-white text-stone-900 shadow-sm"
+              : "text-stone-500 hover:text-stone-700"
+          }`}
+        >
+          Hashtags
+        </button>
+      </div>
+
+      {activeTab === "hooks" ? (
+        <HooksContent />
+      ) : (
+        <Suspense fallback={<div className="max-w-5xl mx-auto space-y-6"><div className="h-8 w-40 skeleton rounded-lg" /><div className="space-y-3">{[1, 2, 3].map((i) => <div key={i} className="h-20 skeleton rounded-2xl" />)}</div></div>}>
+          <HashtagSetsPage />
+        </Suspense>
+      )}
+    </div>
+  );
+});
+
+HooksAndHashtagsPage.displayName = "HooksAndHashtagsPage";
+export default HooksAndHashtagsPage;
+
+const HooksContent = memo(function HooksContent() {
   const [hooks, setHooks] = useState<Hook[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [filterStyle, setFilterStyle] = useState("");
@@ -85,14 +131,27 @@ const HooksLibraryPage = memo(function HooksLibraryPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-600" />
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div className="h-8 w-32 skeleton rounded-lg" />
+          <div className="h-9 w-24 skeleton rounded-xl" />
+        </div>
+        <div className="flex gap-1.5">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-8 w-20 skeleton rounded-xl" />
+          ))}
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 skeleton rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -199,21 +258,13 @@ const HooksLibraryPage = memo(function HooksLibraryPage() {
       {/* Hook list */}
       <div className="space-y-3">
         {hooks.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-stone-200/60">
-            <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Anchor className="w-8 h-8 text-stone-400" />
-            </div>
-            <p className="text-sm font-medium text-stone-600">No hooks saved yet</p>
-            <p className="text-xs text-stone-400 mt-1">
-              Add hooks manually or extract them from your best posts
-            </p>
-            <Button
-              onClick={() => setShowForm(true)}
-              className="mt-4 bg-stone-900 text-white hover:bg-stone-800 rounded-xl"
-            >
-              <Plus className="w-4 h-4" />
-              Add Hook
-            </Button>
+          <div className="bg-white rounded-2xl border border-stone-200/60">
+            <EmptyState
+              icon={Anchor}
+              title="No hooks saved yet"
+              description="Add hooks manually or extract them from your best posts"
+              action={{ label: "Add Hook", onClick: () => setShowForm(true) }}
+            />
           </div>
         ) : (
           hooks.map((hook) => (
@@ -275,5 +326,4 @@ const HooksLibraryPage = memo(function HooksLibraryPage() {
   );
 });
 
-HooksLibraryPage.displayName = "HooksLibraryPage";
-export default HooksLibraryPage;
+HooksContent.displayName = "HooksContent";

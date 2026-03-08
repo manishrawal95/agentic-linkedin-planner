@@ -196,7 +196,7 @@ async def classify_and_extract(post: dict, metrics: dict) -> tuple[str, list[dic
         existing_learnings=existing_text,
     )
 
-    result = await generate(prompt_text, system=prompts.SYSTEM_ANALYST)
+    result = await generate(prompt_text, system=prompts.SYSTEM_ANALYST, feature="analysis")
 
     # Parse combined response
     try:
@@ -376,7 +376,7 @@ async def analyze_batch(post_ids: list[int], force: bool = False) -> dict:
             post_blocks="\n\n".join(post_blocks),
         )
 
-        raw = await generate(batch_classify_prompt, system=prompts.SYSTEM_ANALYST)
+        raw = await generate(batch_classify_prompt, system=prompts.SYSTEM_ANALYST, feature="batch_classify")
         llm_cls = _parse_batch_classifications(raw, posts_to_classify, me_baseline)
         classifications.update(llm_cls)
 
@@ -423,7 +423,7 @@ async def analyze_batch(post_ids: list[int], force: bool = False) -> dict:
         existing_learnings=existing_text,
     )
 
-    raw_learn = await generate(batch_learn_prompt, system=prompts.SYSTEM_ANALYST)
+    raw_learn = await generate(batch_learn_prompt, system=prompts.SYSTEM_ANALYST, feature="batch_learnings")
     batch_learnings = _parse_batch_learnings(raw_learn, posts_with_metrics)
 
     # Force mode: clear all learnings NOW — after LLM calls succeed, so a mid-analysis
@@ -681,7 +681,7 @@ async def _regenerate_playbook(learnings, learnings_hash: str) -> None:
         learnings=learnings_text,
     )
 
-    content = await generate(prompt_text, system=prompts.SYSTEM_ANALYST)
+    content = await generate(prompt_text, system=prompts.SYSTEM_ANALYST, feature="playbook")
 
     conn.execute(
         "INSERT INTO playbook (content, learnings_hash) VALUES (?, ?)",

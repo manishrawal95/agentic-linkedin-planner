@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -19,15 +22,13 @@ import type { Series, Pillar } from "@/types/linkedin";
 const FREQUENCIES = ["daily", "weekly", "biweekly", "monthly"];
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-const selectClass =
-  "w-full border border-stone-200/60 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-400 focus:border-transparent transition-colors";
-
 const SeriesPage = memo(function SeriesPage() {
   const [series, setSeries] = useState<Series[]>([]);
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [seriesStats, setSeriesStats] = useState<Record<number, { post_count: number; last_posted: string | null }>>({});
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -109,9 +110,14 @@ const SeriesPage = memo(function SeriesPage() {
     fetchData();
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Delete this series?")) return;
-    await fetch(`/api/linkedin/series/${id}`, { method: "DELETE" });
+  const handleDelete = (id: number) => {
+    setDeleteId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteId === null) return;
+    await fetch(`/api/linkedin/series/${deleteId}`, { method: "DELETE" });
+    setDeleteId(null);
     fetchData();
   };
 
@@ -126,14 +132,19 @@ const SeriesPage = memo(function SeriesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-400" />
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="h-8 w-40 skeleton rounded-lg" />
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-28 skeleton rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">Content Series</h1>
@@ -173,18 +184,17 @@ const SeriesPage = memo(function SeriesPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1">Pillar</label>
-                <select
-                  value={form.pillar_id}
-                  onChange={(e) => setForm({ ...form, pillar_id: e.target.value })}
-                  className={selectClass}
-                >
-                  <option value="">Any pillar</option>
-                  {pillars.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                <Select value={form.pillar_id || "__any__"} onValueChange={(v) => setForm({ ...form, pillar_id: v === "__any__" ? "" : v })}>
+                  <SelectTrigger className="w-full rounded-xl border-stone-200/60 text-sm">
+                    <SelectValue placeholder="Any pillar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__any__">Any pillar</SelectItem>
+                    {pillars.map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div>
@@ -199,32 +209,30 @@ const SeriesPage = memo(function SeriesPage() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1">Frequency</label>
-                <select
-                  value={form.frequency}
-                  onChange={(e) => setForm({ ...form, frequency: e.target.value })}
-                  className={selectClass}
-                >
-                  {FREQUENCIES.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
+                <Select value={form.frequency} onValueChange={(v) => setForm({ ...form, frequency: v })}>
+                  <SelectTrigger className="w-full rounded-xl border-stone-200/60 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FREQUENCIES.map((f) => (
+                      <SelectItem key={f} value={f}>{f}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1">Preferred Day</label>
-                <select
-                  value={form.preferred_day}
-                  onChange={(e) => setForm({ ...form, preferred_day: e.target.value })}
-                  className={selectClass}
-                >
-                  <option value="">Any day</option>
-                  {DAYS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
+                <Select value={form.preferred_day || "__any__"} onValueChange={(v) => setForm({ ...form, preferred_day: v === "__any__" ? "" : v })}>
+                  <SelectTrigger className="w-full rounded-xl border-stone-200/60 text-sm">
+                    <SelectValue placeholder="Any day" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__any__">Any day</SelectItem>
+                    {DAYS.map((d) => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1">Preferred Time</label>
@@ -248,21 +256,13 @@ const SeriesPage = memo(function SeriesPage() {
       </Dialog>
 
       {series.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-stone-200/60">
-          <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Layers className="w-8 h-8 text-stone-400" />
-          </div>
-          <p className="text-sm font-medium text-stone-600">No content series yet</p>
-          <p className="text-xs text-stone-400 mt-1">
-            Create recurring content series for consistency
-          </p>
-          <Button
-            onClick={() => setShowForm(true)}
-            className="mt-4"
-          >
-            <Plus className="w-4 h-4" />
-            Add Series
-          </Button>
+        <div className="bg-white rounded-2xl border border-stone-200/60">
+          <EmptyState
+            icon={Layers}
+            title="No content series yet"
+            description="Create recurring content series for consistency"
+            action={{ label: "Add Series", onClick: () => setShowForm(true) }}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -356,6 +356,18 @@ const SeriesPage = memo(function SeriesPage() {
           })}
         </div>
       )}
+      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this series?</AlertDialogTitle>
+            <AlertDialogDescription>This will remove the series. Posts linked to it won&apos;t be affected.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="rounded-xl bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 });

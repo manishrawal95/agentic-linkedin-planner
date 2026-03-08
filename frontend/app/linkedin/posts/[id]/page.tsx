@@ -209,15 +209,47 @@ export default function PostDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-600" />
+      <div className="max-w-5xl mx-auto space-y-6">
+        {/* Back link skeleton */}
+        <div className="h-5 w-32 skeleton rounded-lg" />
+        {/* Post detail card skeleton */}
+        <div className="bg-white rounded-2xl border border-stone-200/60 overflow-hidden">
+          <div className="h-1.5 skeleton" />
+          <div className="p-6 space-y-5">
+            {/* Badges row */}
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-20 skeleton rounded-full" />
+              <div className="h-6 w-16 skeleton rounded-full" />
+              <div className="h-6 w-24 skeleton rounded-full" />
+            </div>
+            {/* Hook line skeleton */}
+            <div className="h-16 skeleton rounded-lg" />
+            {/* Content skeleton */}
+            <div className="space-y-2">
+              <div className="h-4 w-full skeleton rounded" />
+              <div className="h-4 w-full skeleton rounded" />
+              <div className="h-4 w-3/4 skeleton rounded" />
+              <div className="h-4 w-5/6 skeleton rounded" />
+            </div>
+          </div>
+        </div>
+        {/* Action buttons skeleton */}
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-32 skeleton rounded-xl" />
+          <div className="h-10 w-36 skeleton rounded-xl" />
+          <div className="h-10 w-32 skeleton rounded-xl" />
+        </div>
+        {/* Metrics section skeleton */}
+        <div className="h-[280px] skeleton rounded-2xl" />
+        {/* Learnings section skeleton */}
+        <div className="h-48 skeleton rounded-2xl" />
       </div>
     );
   }
 
   if (error || !post) {
     return (
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <Link
           href="/linkedin/posts"
           className="inline-flex items-center gap-2 text-sm text-stone-500 hover:text-stone-700 transition-colors"
@@ -240,7 +272,7 @@ export default function PostDetailPage() {
   /* ── Render ─────────────────────────────────────────────────── */
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Back button */}
       <Link
         href="/linkedin/posts"

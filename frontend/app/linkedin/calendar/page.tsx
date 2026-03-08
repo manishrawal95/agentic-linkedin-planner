@@ -16,6 +16,7 @@ import { useToast } from "../components/Toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -212,7 +213,7 @@ const CalendarPage = memo(function CalendarPage() {
       : null;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">
           Content Calendar
@@ -591,21 +592,20 @@ const CalendarPage = memo(function CalendarPage() {
                 <label className="block text-sm font-medium text-stone-700 mb-1">
                   Post Type
                 </label>
-                <select
-                  value={postForm.post_type}
-                  onChange={(e) =>
-                    setPostForm({ ...postForm, post_type: e.target.value })
-                  }
-                  className={selectClass}
-                >
-                  <option value="text">Text</option>
-                  <option value="carousel">Carousel</option>
-                  <option value="personal image">Personal Image</option>
-                  <option value="social proof image">Social Proof Image</option>
-                  <option value="poll">Poll</option>
-                  <option value="video">Video</option>
-                  <option value="article">Article</option>
-                </select>
+                <Select value={postForm.post_type} onValueChange={(v) => setPostForm({ ...postForm, post_type: v })}>
+                  <SelectTrigger className="rounded-xl border-stone-200 h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Text</SelectItem>
+                    <SelectItem value="carousel">Carousel</SelectItem>
+                    <SelectItem value="personal image">Personal Image</SelectItem>
+                    <SelectItem value="social proof image">Social Proof Image</SelectItem>
+                    <SelectItem value="poll">Poll</SelectItem>
+                    <SelectItem value="video">Video</SelectItem>
+                    <SelectItem value="article">Article</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1">

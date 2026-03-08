@@ -45,7 +45,7 @@ export default function MemoryPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <div className="h-8 w-48 skeleton rounded-lg" />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[...Array(4)].map((_, i) => (
@@ -58,7 +58,7 @@ export default function MemoryPage() {
 
   if (error) {
     return (
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">Creator Memory</h1>
         <ErrorCard message={error} onRetry={refetch} />
       </div>
@@ -67,7 +67,7 @@ export default function MemoryPage() {
 
   if (!memory || !memory.id) {
     return (
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">Creator Memory</h1>
         <div className="bg-white rounded-2xl border border-stone-200/60 p-8">
           <EmptyState
@@ -86,7 +86,7 @@ export default function MemoryPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">Creator Memory</h1>

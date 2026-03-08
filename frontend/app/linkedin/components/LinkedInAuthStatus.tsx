@@ -23,7 +23,7 @@ const LinkedInAuthStatus = memo(function LinkedInAuthStatus() {
 
   if (status.authenticated) {
     return (
-      <Badge variant="secondary" className="gap-1.5 bg-emerald-50 text-emerald-700 border-emerald-200/60 hover:bg-emerald-50 rounded-xl px-3 py-1.5">
+      <Badge variant="secondary" className="gap-1.5 bg-blue-50 text-[#0a66c2] border-blue-200/60 hover:bg-blue-50 rounded-xl px-3 py-1.5">
         <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
         LinkedIn connected
       </Badge>

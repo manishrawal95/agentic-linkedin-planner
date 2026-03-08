@@ -25,7 +25,7 @@ export default function IdeasPage() {
     refetch,
   } = useApi<IdeasResponse>("/api/linkedin/ideas");
   const [topicHint, setTopicHint] = useState("");
-  const [filter, setFilter] = useState<"all" | "pending" | "approved" | "drafted" | "rejected">("all");
+  const [filter, setFilter] = useState<"all" | "pending" | "drafted" | "rejected">("all");
 
   const { running: generating, launch: launchGenerate } = useBackgroundTask<{ ideas: Idea[] }>({
     key: "ideas_generate",
@@ -56,29 +56,9 @@ export default function IdeasPage() {
       toast.error(err.detail || "Failed to approve idea");
       return;
     }
-    toast.success("Generating 2 draft variations...");
+    toast.success("Drafts generating in background");
     await refetch();
-
-    // Poll silently — only fetch the single idea status, not the full list
-    let attempts = 0;
-    const poll = setInterval(async () => {
-      attempts++;
-      try {
-        const check = await fetch(`/api/linkedin/ideas`);
-        const checkData = await check.json();
-        const updated = (checkData.ideas || []).find((i: Idea) => i.id === id);
-        if (updated?.status === "drafted" || attempts >= 30) {
-          clearInterval(poll);
-          if (updated?.status === "drafted") {
-            toast.success("Drafts ready — check Draft Workshop");
-          }
-          refetch();
-        }
-      } catch {
-        // Silent — don't interrupt on network blips
-      }
-    }, 5000);
-  }, [refetch, toast]);
+  }, [refetch]);
 
   const handleReject = useCallback(async (id: number) => {
     const res = await fetch(`/api/linkedin/ideas/${id}/reject`, { method: "POST" });
@@ -94,14 +74,13 @@ export default function IdeasPage() {
   const counts = {
     all: ideas.length,
     pending: ideas.filter((i) => i.status === "pending").length,
-    approved: ideas.filter((i) => i.status === "approved").length,
     drafted: ideas.filter((i) => i.status === "drafted").length,
     rejected: ideas.filter((i) => i.status === "rejected").length,
   };
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <div className="h-8 w-40 skeleton rounded-lg" />
         <div className="space-y-3">
           {[...Array(4)].map((_, i) => (
@@ -114,7 +93,7 @@ export default function IdeasPage() {
 
   if (error) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">
           Idea Engine
         </h1>
@@ -124,7 +103,7 @@ export default function IdeasPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 px-1 sm:px-0">
+    <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6 px-1 sm:px-0">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
@@ -132,7 +111,7 @@ export default function IdeasPage() {
             Idea Engine
           </h1>
           <p className="text-sm text-stone-500 mt-0.5">
-            {counts.pending} pending &middot; {counts.approved} ready to draft
+            {counts.pending} pending &middot; {counts.drafted} drafted
           </p>
         </div>
         <Button
@@ -166,7 +145,7 @@ export default function IdeasPage() {
 
       {/* Filter pills — horizontally scrollable on mobile */}
       <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
-        {(["all", "pending", "approved", "drafted", "rejected"] as const).map(
+        {(["all", "pending", "drafted", "rejected"] as const).map(
           (status) => (
             <button
               key={status}

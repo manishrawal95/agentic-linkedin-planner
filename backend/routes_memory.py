@@ -84,11 +84,28 @@ async def generate_ideas_endpoint(
     return {"task_id": task_id, "status": "running"}
 
 
+@router.post("/ideas/auto-refresh")
+async def auto_refresh_ideas():
+    """Check if ideas need refreshing and generate if so."""
+    from backend.ideator import should_refresh_ideas, generate_ideas, get_pending_ideas
+
+    if not should_refresh_ideas():
+        return {"refreshed": False, "ideas": get_pending_ideas()}
+
+    async def _run():
+        ideas = await generate_ideas(count=5)
+        return {"ideas": ideas}
+
+    task_id = create_task("ideas_auto_refresh", _run())
+    return {"refreshed": True, "task_id": task_id, "status": "running"}
+
+
 @router.post("/ideas/{idea_id}/approve")
 async def approve_idea_endpoint(idea_id: int, background_tasks: BackgroundTasks):
     """Approve an idea and auto-generate 2 draft variations in background."""
     from backend.ideator import approve_idea
     from backend.drafter import generate_drafts
+    from backend.briefing import invalidate_cache
 
     try:
         idea = approve_idea(idea_id)
@@ -96,6 +113,7 @@ async def approve_idea_endpoint(idea_id: int, background_tasks: BackgroundTasks)
         raise HTTPException(status_code=404, detail=str(e))
 
     idea_dict = dict(idea) if not isinstance(idea, dict) else idea
+    invalidate_cache()
 
     async def _auto_draft():
         try:

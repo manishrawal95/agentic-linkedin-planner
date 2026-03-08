@@ -115,14 +115,7 @@ const IdeaCard = memo(function IdeaCard({
           </>
         )}
 
-        {idea.status === "approved" && (
-          <Badge className="bg-amber-50 text-amber-700 rounded-full gap-1">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Drafting...
-          </Badge>
-        )}
-
-        {idea.status === "drafted" && (
+        {(idea.status === "approved" || idea.status === "drafted") && (
           <Badge className="bg-stone-100 text-stone-600 rounded-full">
             Drafted
           </Badge>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -91,14 +92,19 @@ const CompetitorsPage = memo(function CompetitorsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-600" />
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="h-8 w-40 skeleton rounded-lg" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-36 skeleton rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">
@@ -243,21 +249,13 @@ const CompetitorsPage = memo(function CompetitorsPage() {
       </Dialog>
 
       {competitors.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-stone-200/60">
-          <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-            <Users className="w-8 h-8 text-stone-400" />
-          </div>
-          <p className="text-sm font-medium text-stone-600">No competitors tracked yet</p>
-          <p className="text-xs text-stone-500 mt-1">
-            Add competitors to analyze their content strategy
-          </p>
-          <Button
-            onClick={() => setShowForm(true)}
-            className="mt-4"
-          >
-            <Plus className="w-4 h-4" />
-            Add Competitor
-          </Button>
+        <div className="bg-white rounded-2xl border border-stone-200/60">
+          <EmptyState
+            icon={Users}
+            title="No competitors tracked yet"
+            description="Add competitors to analyze their content strategy"
+            action={{ label: "Add Competitor", onClick: () => setShowForm(true) }}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

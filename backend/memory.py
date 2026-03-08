@@ -181,7 +181,8 @@ async def build_memory() -> dict:
     )
     voice_raw = await generate(
         prompts.BUILD_VOICE_PROFILE.format(posts_text=top_posts_text, post_count=post_count),
-        system=prompts.SYSTEM_MEMORY
+        system=prompts.SYSTEM_MEMORY,
+        feature="memory_build",
     )
     try:
         voice_profile = parse_llm_json(voice_raw)
@@ -202,7 +203,8 @@ async def build_memory() -> dict:
             audience_context=audience_context,
             post_count=post_count,
         ),
-        system=prompts.SYSTEM_MEMORY
+        system=prompts.SYSTEM_MEMORY,
+        feature="memory_build",
     )
     try:
         audience_model = parse_llm_json(audience_raw)
@@ -221,7 +223,8 @@ async def build_memory() -> dict:
             trajectory_context=trajectory_context,
             post_count=post_count,
         ),
-        system=prompts.SYSTEM_MEMORY
+        system=prompts.SYSTEM_MEMORY,
+        feature="memory_build",
     )
     try:
         growth_trajectory = parse_llm_json(trajectory_raw)
@@ -294,7 +297,8 @@ async def update_memory_after_analysis(post_id: int) -> dict | None:
             learnings_text=json.dumps(learnings)[:500],
             classification=post.get("classification", "unclassified"),
         ),
-        system=prompts.SYSTEM_MEMORY
+        system=prompts.SYSTEM_MEMORY,
+        feature="memory_update",
     )
 
     try:

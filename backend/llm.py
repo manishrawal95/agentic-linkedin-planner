@@ -17,20 +17,27 @@ _gemini_client = None
 _claude_client = None
 
 
-async def generate(prompt: str, system: str = "") -> str:
-    """Generate text using the configured LLM provider."""
+async def generate(prompt: str, system: str = "", feature: str = "unknown") -> str:
+    """Generate text using the configured LLM provider.
+
+    Args:
+        prompt: The user prompt to send.
+        system: Optional system prompt.
+        feature: Label for token tracking (e.g. 'briefing', 'draft', 'analysis').
+    """
     provider = config.LLM_PROVIDER.lower()
     start = time.monotonic()
     try:
         if provider == "gemini":
-            result = await _generate_gemini(prompt, system)
+            result, usage = await _generate_gemini(prompt, system)
         elif provider == "claude":
-            result = await _generate_claude(prompt, system)
+            result, usage = await _generate_claude(prompt, system)
         else:
             raise ValueError(f"Unknown LLM provider: {provider}. Use 'gemini' or 'claude'.")
         elapsed = time.monotonic() - start
         logger.info("LLM call completed: provider=%s model=%s duration=%.1fs chars=%d",
                      provider, get_model_name(), elapsed, len(result))
+        _log_token_usage(provider, get_model_name(), feature, usage, int(elapsed * 1000))
         return result
     except Exception:
         elapsed = time.monotonic() - start
@@ -38,6 +45,26 @@ async def generate(prompt: str, system: str = "") -> str:
                       provider, get_model_name(), elapsed,
                       extra={"action": f"Check {provider} API key and quota."})
         raise
+
+
+def _log_token_usage(
+    provider: str, model: str, feature: str,
+    usage: dict[str, int], duration_ms: int,
+) -> None:
+    """Log token usage to the database. Best-effort, never raises."""
+    try:
+        from backend.db import get_conn
+        conn = get_conn()
+        conn.execute(
+            """INSERT INTO token_usage (provider, model, feature, input_tokens, output_tokens, duration_ms)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (provider, model, feature,
+             usage.get("input_tokens", 0), usage.get("output_tokens", 0),
+             duration_ms),
+        )
+        conn.commit()
+    except Exception as e:
+        logger.warning("Failed to log token usage: %s", e)
 
 
 def _get_gemini_client():
@@ -60,7 +87,7 @@ def _get_claude_client():
     return _claude_client
 
 
-async def _generate_gemini(prompt: str, system: str) -> str:
+async def _generate_gemini(prompt: str, system: str) -> tuple[str, dict[str, int]]:
     from google import genai
     from google.genai import errors as genai_errors
 
@@ -77,7 +104,12 @@ async def _generate_gemini(prompt: str, system: str) -> str:
                     temperature=config.LLM_TEMPERATURE,
                 ),
             )
-            return response.text or ""
+            usage: dict[str, int] = {}
+            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                meta = response.usage_metadata
+                usage["input_tokens"] = getattr(meta, "prompt_token_count", 0) or 0
+                usage["output_tokens"] = getattr(meta, "candidates_token_count", 0) or 0
+            return response.text or "", usage
         except genai_errors.ClientError as e:
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                 wait = min(60, (attempt + 1) * 15)
@@ -89,7 +121,7 @@ async def _generate_gemini(prompt: str, system: str) -> str:
     raise RuntimeError("Gemini rate limit exceeded after retries. Try again in a few minutes.")
 
 
-async def _generate_claude(prompt: str, system: str) -> str:
+async def _generate_claude(prompt: str, system: str) -> tuple[str, dict[str, int]]:
     import anthropic
 
     client = _get_claude_client()
@@ -107,11 +139,15 @@ async def _generate_claude(prompt: str, system: str) -> str:
                 kwargs["system"] = system
 
             response = await client.messages.create(**kwargs)
+            usage: dict[str, int] = {}
+            if hasattr(response, "usage") and response.usage:
+                usage["input_tokens"] = getattr(response.usage, "input_tokens", 0) or 0
+                usage["output_tokens"] = getattr(response.usage, "output_tokens", 0) or 0
             if not response.content:
                 logger.warning("Claude returned empty content",
                                extra={"action": "Check if content was filtered by safety settings."})
-                return ""
-            return response.content[0].text
+                return "", usage
+            return response.content[0].text, usage
         except anthropic.RateLimitError:
             wait = min(60, (attempt + 1) * 15)
             logger.warning("Claude rate limited, retrying in %ds (attempt %d/%d)", wait, attempt + 1, max_retries,

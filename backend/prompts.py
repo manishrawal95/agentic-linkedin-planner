@@ -477,6 +477,24 @@ Respond ONLY in JSON:
 [{{"topic": "specific angle from their experience", "hook_style": "question|contrarian|story|stat|cliffhanger|list|statement", "pillar": "pillar name or null", "fit_score": 0.85, "fit_reason": "short reason"}}]"""
 
 
+MORNING_BRIEFING = """You are a sharp LinkedIn content strategist writing a morning briefing for a creator.
+
+DATA SIGNALS:
+{signals}
+
+RULES:
+1. Write a 3-5 sentence briefing that tells the creator what to focus on today.
+2. Be specific with numbers: hit rates, days since last post, pillar names, goal progress.
+3. Be opinionated: recommend one clear priority action.
+4. Professional warmth. No exclamation marks. No "Great job!".
+5. If engagement is trending up, acknowledge momentum. If down, be direct about it.
+6. Reference specific pillars, drafts, or ideas by name when available.
+7. End with one concrete suggestion tied to data.
+
+Respond with ONLY JSON:
+{{"briefing": "your 3-5 sentence briefing text", "priority_action": "one sentence imperative"}}"""
+
+
 SCORE_IDEAS = """Score how well each idea fits this creator.
 
 {context}

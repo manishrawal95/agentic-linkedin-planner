@@ -5,6 +5,7 @@ import { X, FileText, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Pillar } from "@/types/linkedin";
 
 interface PostFormProps {
@@ -17,9 +18,6 @@ interface PostFormProps {
 const POST_TYPES = ["text", "carousel", "personal image", "social proof image", "poll", "video", "article"];
 const CTA_TYPES = ["none", "question", "link", "engagement-bait", "advice"];
 const HOOK_STYLES = ["", "Question", "Contrarian", "Story", "Stat", "Cliffhanger", "List", "Statement"];
-
-const selectClass =
-  "w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-stone-400 focus:border-transparent transition-colors";
 
 const PostForm = memo(function PostForm({
   pillars,
@@ -146,10 +144,10 @@ const PostForm = memo(function PostForm({
           <label className="block text-sm font-medium text-stone-600 mb-1">
             Author
           </label>
-          <select
+          <Select
             value={authorMode}
-            onChange={(e) => {
-              const mode = e.target.value as "me" | "other";
+            onValueChange={(v: string) => {
+              const mode = v as "me" | "other";
               setAuthorMode(mode);
               if (mode === "me") {
                 setAuthorName("");
@@ -158,11 +156,15 @@ const PostForm = memo(function PostForm({
                 setForm({ ...form, author: authorName || "other" });
               }
             }}
-            className={selectClass}
           >
-            <option value="me">Me</option>
-            <option value="other">Other</option>
-          </select>
+            <SelectTrigger className="rounded-xl border-stone-200 h-10 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="me">Me</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
           {authorMode === "other" && (
             <Input
               type="text"
@@ -181,17 +183,16 @@ const PostForm = memo(function PostForm({
           <label className="block text-sm font-medium text-stone-600 mb-1">
             Post Type
           </label>
-          <select
-            value={form.post_type}
-            onChange={(e) => setForm({ ...form, post_type: e.target.value })}
-            className={selectClass}
-          >
-            {POST_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <Select value={form.post_type} onValueChange={(v) => setForm({ ...form, post_type: v })}>
+            <SelectTrigger className="rounded-xl border-stone-200 h-10 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {POST_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -252,34 +253,33 @@ const PostForm = memo(function PostForm({
           <label className="block text-sm font-medium text-stone-600 mb-1">
             Hook Style
           </label>
-          <select
-            value={form.hook_style}
-            onChange={(e) => setForm({ ...form, hook_style: e.target.value })}
-            className={selectClass}
-          >
-            {HOOK_STYLES.map((s) => (
-              <option key={s} value={s}>
-                {s ? s.charAt(0).toUpperCase() + s.slice(1) : "No style"}
-              </option>
-            ))}
-          </select>
+          <Select value={form.hook_style || "__none__"} onValueChange={(v) => setForm({ ...form, hook_style: v === "__none__" ? "" : v })}>
+            <SelectTrigger className="rounded-xl border-stone-200 h-10 text-sm">
+              <SelectValue placeholder="No style" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No style</SelectItem>
+              {HOOK_STYLES.filter(Boolean).map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-stone-600 mb-1">
             CTA Type
           </label>
-          <select
-            value={form.cta_type}
-            onChange={(e) => setForm({ ...form, cta_type: e.target.value })}
-            className={selectClass}
-          >
-            {CTA_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <Select value={form.cta_type} onValueChange={(v) => setForm({ ...form, cta_type: v })}>
+            <SelectTrigger className="rounded-xl border-stone-200 h-10 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CTA_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -288,23 +288,17 @@ const PostForm = memo(function PostForm({
           <label className="block text-sm font-medium text-stone-600 mb-1">
             Pillar
           </label>
-          <select
-            value={form.pillar_id}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                pillar_id: e.target.value ? Number(e.target.value) : "",
-              })
-            }
-            className={selectClass}
-          >
-            <option value="">No pillar</option>
-            {pillars.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <Select value={form.pillar_id ? String(form.pillar_id) : "__none__"} onValueChange={(v) => setForm({ ...form, pillar_id: v === "__none__" ? "" : Number(v) })}>
+            <SelectTrigger className="rounded-xl border-stone-200 h-10 text-sm">
+              <SelectValue placeholder="No pillar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No pillar</SelectItem>
+              {pillars.map((p) => (
+                <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div>

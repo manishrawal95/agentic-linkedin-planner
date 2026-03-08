@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 function parseHashtags(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw;
@@ -28,6 +31,7 @@ const HashtagSetsPage = memo(function HashtagSetsPage() {
   const [filterPillar, setFilterPillar] = useState("");
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState({
     name: "",
     hashtags: "",
@@ -84,14 +88,16 @@ const HashtagSetsPage = memo(function HashtagSetsPage() {
     [form, fetchHashtagSets]
   );
 
-  const handleDelete = useCallback(
-    async (id: number) => {
-      if (!confirm("Delete this hashtag set?")) return;
-      await fetch(`/api/linkedin/hashtags/${id}`, { method: "DELETE" });
-      fetchHashtagSets();
-    },
-    [fetchHashtagSets]
-  );
+  const handleDelete = useCallback((id: number) => {
+    setDeleteId(id);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (deleteId === null) return;
+    await fetch(`/api/linkedin/hashtags/${deleteId}`, { method: "DELETE" });
+    setDeleteId(null);
+    fetchHashtagSets();
+  }, [deleteId, fetchHashtagSets]);
 
   const handleCopyAll = useCallback(
     async (id: number, tags: string[]) => {
@@ -123,14 +129,19 @@ const HashtagSetsPage = memo(function HashtagSetsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-400" />
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="h-8 w-40 skeleton rounded-lg" />
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 skeleton rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -151,18 +162,17 @@ const HashtagSetsPage = memo(function HashtagSetsPage() {
       {/* Filter by pillar */}
       <div className="flex gap-3 items-center bg-white rounded-2xl border border-stone-200/60 px-4 py-3">
         <Filter className="w-4 h-4 text-stone-400" />
-        <select
-          value={filterPillar}
-          onChange={(e) => setFilterPillar(e.target.value)}
-          className="border border-stone-200/60 rounded-lg px-3 py-1.5 text-sm bg-stone-50 focus:bg-white transition-colors"
-        >
-          <option value="">All pillars</option>
-          {pillars.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        <Select value={filterPillar || "__all__"} onValueChange={(v) => setFilterPillar(v === "__all__" ? "" : v)}>
+          <SelectTrigger className="w-[180px] rounded-xl border-stone-200/60 text-sm">
+            <SelectValue placeholder="All pillars" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All pillars</SelectItem>
+            {pillars.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Add hashtag set form */}
@@ -206,18 +216,17 @@ const HashtagSetsPage = memo(function HashtagSetsPage() {
             <label className="block text-sm font-medium text-stone-700 mb-1">
               Content Pillar
             </label>
-            <select
-              value={form.pillar_id}
-              onChange={(e) => setForm({ ...form, pillar_id: e.target.value })}
-              className="w-full border border-stone-200/60 rounded-lg px-3 py-2 text-sm bg-stone-50 focus:bg-white focus:ring-2 focus:ring-stone-400 focus:border-stone-400 transition-colors"
-            >
-              <option value="">No pillar</option>
-              {pillars.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <Select value={form.pillar_id || "__none__"} onValueChange={(v) => setForm({ ...form, pillar_id: v === "__none__" ? "" : v })}>
+              <SelectTrigger className="w-full rounded-xl border-stone-200/60 text-sm">
+                <SelectValue placeholder="No pillar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No pillar</SelectItem>
+                {pillars.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex gap-3">
             <Button type="submit">
@@ -237,23 +246,13 @@ const HashtagSetsPage = memo(function HashtagSetsPage() {
       {/* Hashtag set cards */}
       <div className="space-y-4">
         {hashtagSets.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-stone-200/60">
-            <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-              <Hash className="w-8 h-8 text-stone-400" />
-            </div>
-            <p className="text-sm font-medium text-stone-600">
-              No hashtag sets yet
-            </p>
-            <p className="text-xs text-stone-400 mt-1">
-              Create reusable hashtag groups for your LinkedIn posts
-            </p>
-            <Button
-              onClick={() => setShowForm(true)}
-              className="mt-4 gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Add Set
-            </Button>
+          <div className="bg-white rounded-2xl border border-stone-200/60">
+            <EmptyState
+              icon={Hash}
+              title="No hashtag sets yet"
+              description="Create reusable hashtag groups for your LinkedIn posts"
+              action={{ label: "Add Set", onClick: () => setShowForm(true) }}
+            />
           </div>
         ) : (
           hashtagSets.map((set) => {
@@ -373,6 +372,19 @@ const HashtagSetsPage = memo(function HashtagSetsPage() {
           })
         )}
       </div>
+
+      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this hashtag set?</AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="rounded-xl bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 });

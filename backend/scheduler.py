@@ -162,7 +162,7 @@ async def find_optimal_slot(draft_id: int) -> dict:
     )
 
     try:
-        raw = await generate(prompt_text, system=prompts.SYSTEM_DRAFTER)
+        raw = await generate(prompt_text, system=prompts.SYSTEM_DRAFTER, feature="scheduler")
         result = parse_llm_json(raw)
 
         if isinstance(result, dict) and "date" in result and "time" in result:

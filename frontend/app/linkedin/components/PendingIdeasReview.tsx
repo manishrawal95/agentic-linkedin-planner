@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Lightbulb, Check, X, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
@@ -21,10 +21,51 @@ const PendingIdeasReview = memo(function PendingIdeasReview() {
   const { data, loading, error, refetch } = useApi<IdeasResponse>("/api/linkedin/ideas");
   const [actioning, setActioning] = useState<Set<number>>(new Set());
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+  const [autoRefreshing, setAutoRefreshing] = useState(false);
   const { mutate: generateIdeas, loading: generating } = useMutation<void, unknown>(
     "/api/linkedin/ideas/generate",
     "POST"
   );
+
+  // F7: Auto-refresh ideas on mount if stale
+  const autoRefreshAttempted = useRef(false);
+  useEffect(() => {
+    if (autoRefreshAttempted.current || loading || !data) return;
+    autoRefreshAttempted.current = true;
+    const pending = (data.ideas ?? []).filter((i) => i.status === "pending");
+    if (pending.length === 0) {
+      setAutoRefreshing(true);
+      fetch("/api/linkedin/ideas/auto-refresh", { method: "POST" })
+        .then((res) => {
+          if (res.ok) return res.json();
+          return null;
+        })
+        .then((result) => {
+          if (result?.refreshed) {
+            // Poll for task completion then refetch
+            const checkTask = () => {
+              setTimeout(() => {
+                fetch(`/api/linkedin/tasks/${result.task_id}`)
+                  .then((r) => r.json())
+                  .then((task) => {
+                    if (task.status === "completed" || task.status === "failed") {
+                      refetch();
+                      setAutoRefreshing(false);
+                    } else {
+                      checkTask();
+                    }
+                  })
+                  .catch(() => setAutoRefreshing(false));
+              }, 2000);
+            };
+            checkTask();
+          } else {
+            setAutoRefreshing(false);
+          }
+        })
+        .catch(() => setAutoRefreshing(false));
+    }
+  }, [loading, data, refetch]);
 
   const pendingIdeas = (data?.ideas ?? [])
     .filter((i) => i.status === "pending" && !dismissed.has(i.id))
@@ -39,7 +80,7 @@ const PendingIdeasReview = memo(function PendingIdeasReview() {
         throw new Error(err.detail || `Approve failed (${res.status})`);
       }
       setDismissed((prev) => new Set(prev).add(id));
-      toast.success("Idea approved — draft will be generated");
+      toast.success("Drafts generating in background");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to approve idea";
       toast.error(message);
@@ -127,7 +168,12 @@ const PendingIdeasReview = memo(function PendingIdeasReview() {
         )}
       </div>
 
-      {pendingIdeas.length === 0 ? (
+      {autoRefreshing ? (
+        <div className="flex items-center gap-2 py-6 justify-center text-sm text-stone-500">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-stone-400" />
+          Generating fresh ideas...
+        </div>
+      ) : pendingIdeas.length === 0 ? (
         <EmptyState
           icon={Lightbulb}
           title="No pending ideas"

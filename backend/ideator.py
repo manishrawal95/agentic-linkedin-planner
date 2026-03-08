@@ -106,6 +106,7 @@ async def _ai_score_ideas(ideas: list[dict], creator_context: str) -> list[dict]
                 ideas_json=json.dumps(ideas_for_scoring, indent=2),
             ),
             system=prompts.SYSTEM_DRAFTER,
+            feature="ideation_score",
         )
         scored = parse_llm_json(raw)
         if isinstance(scored, list) and len(scored) == len(ideas):
@@ -237,7 +238,7 @@ async def generate_ideas(count: int = 5, topic_hint: str = "") -> list[dict]:
         )
 
     try:
-        raw = await generate(prompt_text, system=prompts.SYSTEM_DRAFTER)
+        raw = await generate(prompt_text, system=prompts.SYSTEM_DRAFTER, feature="ideation")
         ai_ideas = parse_llm_json(raw)
         if isinstance(ai_ideas, list):
             for ai in ai_ideas[:remaining]:
@@ -291,6 +292,27 @@ async def generate_ideas(count: int = 5, topic_hint: str = "") -> list[dict]:
     conn.commit()
 
     return ideas[:count]
+
+
+def should_refresh_ideas() -> bool:
+    """Check if ideas need refreshing."""
+    conn = get_conn()
+
+    # No pending ideas at all
+    pending = conn.execute(
+        "SELECT COUNT(*) as cnt FROM ideas WHERE status = 'pending'"
+    ).fetchone()
+    if pending["cnt"] == 0:
+        return True
+
+    # All pending ideas are older than 7 days
+    fresh = conn.execute(
+        "SELECT COUNT(*) as cnt FROM ideas WHERE status = 'pending' AND created_at >= datetime('now', '-7 days')"
+    ).fetchone()
+    if fresh["cnt"] == 0:
+        return True
+
+    return False
 
 
 def get_pending_ideas() -> list[dict]:

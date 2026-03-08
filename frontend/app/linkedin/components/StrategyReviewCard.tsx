@@ -77,8 +77,10 @@ const StrategyReviewCard = memo(function StrategyReviewCard() {
   if (loading) {
     return (
       <SectionCard title="Strategy Review" icon={Activity}>
-        <div className="h-32 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-stone-400" />
+        <div className="space-y-3 py-2">
+          <div className="h-4 w-3/4 skeleton rounded" />
+          <div className="h-4 w-1/2 skeleton rounded" />
+          <div className="h-4 w-2/3 skeleton rounded" />
         </div>
       </SectionCard>
     );

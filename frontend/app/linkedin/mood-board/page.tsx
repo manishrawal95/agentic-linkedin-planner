@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -213,14 +214,33 @@ const MoodBoardPage = memo(function MoodBoardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-600" />
+      <div className="max-w-5xl mx-auto space-y-6">
+        {/* Header skeleton */}
+        <div className="flex justify-between items-center">
+          <div className="space-y-2">
+            <div className="h-7 w-36 skeleton rounded-lg" />
+            <div className="h-4 w-48 skeleton rounded-lg" />
+          </div>
+          <div className="h-9 w-28 skeleton rounded-lg" />
+        </div>
+        {/* Column skeletons matching 3-column mood board layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="skeleton rounded-2xl space-y-0">
+              <div className="h-12 skeleton rounded-t-2xl rounded-b-none" />
+              <div className="p-3 space-y-2">
+                <div className="h-20 skeleton rounded-xl" />
+                <div className="h-20 skeleton rounded-xl" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Delete pillar confirmation dialog */}
       <Dialog open={deletingPillarId !== null} onOpenChange={(open) => { if (!open) setDeletingPillarId(null); }}>
         <DialogContent>
@@ -322,21 +342,13 @@ const MoodBoardPage = memo(function MoodBoardPage() {
 
       {/* Columns layout */}
       {pillars.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-stone-200/60">
-          <div className="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-            <Palette className="w-8 h-8 text-stone-400" />
-          </div>
-          <p className="text-sm font-medium text-stone-600">No pillars yet</p>
-          <p className="text-xs text-stone-400 mt-1">
-            Create your first content pillar to start organizing ideas
-          </p>
-          <Button
-            onClick={() => setShowPillarForm(true)}
-            className="mt-4"
-          >
-            <Plus className="w-4 h-4" />
-            Add Pillar
-          </Button>
+        <div className="bg-white rounded-2xl border border-stone-200/60">
+          <EmptyState
+            icon={Palette}
+            title="No pillars yet"
+            description="Create your first content pillar to start organizing ideas"
+            action={{ label: "Add Pillar", onClick: () => setShowPillarForm(true) }}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
